@@ -1,8 +1,8 @@
-# Uply Digital V8 — Vercel Native
+# Uply Digital V9 — Vercel Native
 
-Versi V8 adalah project lengkap untuk Vercel + PostgreSQL/Neon. Tidak membutuhkan Google Apps Script.
+Versi V9 adalah project lengkap untuk Vercel + PostgreSQL/Neon. Tidak membutuhkan Google Apps Script.
 
-## Perubahan utama V8
+## Perubahan utama V9
 
 - Logo website menggunakan logo Uply Digital lama (`assets/logo-uply-digital.png`).
 - Bagian teknis di homepage dihapus dan diganti copy brand yang lebih cocok untuk pelanggan.
@@ -115,3 +115,10 @@ Untuk produk yang ingin otomatis dikirim setelah pembayaran berhasil, edit produ
 - Ganti password admin yang pernah terlihat di screenshot/chat.
 - Gunakan Midtrans Sandbox sebelum Production.
 - Inventory dapat berisi data sensitif produk; akses hanya melalui akun admin.
+
+
+## Perbaikan V9
+- Checkout pelanggan diperkuat dan memberi pesan error yang jelas.
+- Setelah login/daftar dari tombol checkout, pelanggan otomatis kembali ke checkout produk yang dipilih.
+- Header memakai logo mark lama + teks “Uply Digital”.
+- Inventory satu-per-satu dan fitur admin V8 tetap dipertahankan.

@@ -22,7 +22,8 @@ const state = {
   adminOrderStatus: 'all',
   customerSearch: '',
   inventoryProduct: 'all',
-  inventoryStatus: 'all'
+  inventoryStatus: 'all',
+  pendingCheckout: ''
 };
 
 const statusLabel = {
@@ -68,8 +69,8 @@ async function api(action, payload={}){
     headers:{'Content-Type':'application/json', ...(state.token ? {'Authorization':'Bearer ' + state.token} : {})},
     body:JSON.stringify({action,payload})
   });
-  const d = await r.json().catch(() => ({ok:false,error:'Respons server tidak valid.'}));
-  if (!d.ok) throw Error(d.error || 'Permintaan gagal.');
+  const d = await r.json().catch(() => ({ok:false,error:`Server mengembalikan respons yang tidak valid (HTTP ${r.status}).`}));
+  if (!r.ok || !d.ok) throw Error(d.error || `Permintaan gagal (HTTP ${r.status}).`);
   return d.data;
 }
 
@@ -172,23 +173,32 @@ function accountModal(){
 
 function productModal(id){
   const p = state.catalog.products.find(x=>x.id===id); if(!p) return;
-  openModal(p.name, `<div class="cover ${esc(p.icon)} modal-cover">${icon(p)}<strong>${esc(p.duration)}</strong></div><p>${esc(p.description)}</p><ul class="benefits">${(p.benefits||[]).map(x=>`<li>✓ ${esc(x)}</li>`).join('')}</ul><div class="notice"><strong>Ketentuan</strong><br>${esc(p.terms)}</div><div class="card-foot"><div><div class="price">${money(p.price)}</div><div class="tiny">${p.stock===-1?'Stok tersedia':p.stock>0?`Stok ${p.stock}`:'Stok habis'}</div></div><button class="btn" data-checkout="${esc(p.id)}" ${!state.catalog.settings.storeOpen||p.stock===0?'disabled':''}>Lanjut checkout</button></div>`);
+  const unavailable = !state.catalog.settings.storeOpen || p.stock===0;
+  const reason = !state.catalog.settings.storeOpen ? 'Toko sedang menutup pesanan baru.' : p.stock===0 ? 'Stok produk sedang habis.' : 'Kamu bisa lanjut ke checkout.';
+  openModal(p.name, `<div class="cover ${esc(p.icon)} modal-cover">${icon(p)}<strong>${esc(p.duration)}</strong></div><p>${esc(p.description)}</p><ul class="benefits">${(p.benefits||[]).map(x=>`<li>✓ ${esc(x)}</li>`).join('')}</ul><div class="notice"><strong>Ketentuan</strong><br>${esc(p.terms)}</div><div class="checkout-ready ${unavailable?'is-off':''}">${esc(reason)}</div><div class="card-foot"><div><div class="price">${money(p.price)}</div><div class="tiny">${p.stock===-1?'Stok tersedia':p.stock>0?`Stok ${p.stock}`:'Stok habis'}</div></div><button class="btn" data-checkout="${esc(p.id)}" ${unavailable?'disabled':''}>Lanjut checkout</button></div>`);
 }
-
 function checkoutPage(id){
   const p = state.catalog.products.find(x=>x.id===id);
-  if(!p) return `<div class="empty">Produk tidak tersedia.</div>`;
+  if(!p) return `<section class="page"><div class="wrap empty"><h2>Produk tidak tersedia</h2><p>Produk mungkin sudah dinonaktifkan. Kembali ke katalog untuk memilih produk lain.</p><a class="btn" href="#katalog">Kembali ke katalog</a></div></section>`;
+  if(!state.catalog.settings.storeOpen) return `<section class="page"><div class="wrap empty"><h2>Checkout sedang ditutup</h2><p>Admin sedang menutup pesanan baru. Kamu masih bisa melihat katalog.</p><a class="btn" href="#katalog">Kembali ke katalog</a></div></section>`;
+  if(p.stock===0) return `<section class="page"><div class="wrap empty"><h2>Stok sedang habis</h2><p>Produk ini belum bisa dipesan sekarang.</p><a class="btn" href="#katalog">Pilih produk lain</a></div></section>`;
   if(!state.user || state.user.role!=='user'){
-    setTimeout(()=>openModal('Masuk untuk checkout', loginForm(false)),0);
-    return `<section class="page"><div class="wrap empty">Masuk sebagai pelanggan untuk melanjutkan checkout.</div></section>`;
+    state.pendingCheckout = id;
+    return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Checkout</div><h1>Masuk untuk melanjutkan</h1><p>Checkout hanya menggunakan akun pelanggan agar pesanan tersimpan dan dapat dipantau.</p></div><div class="panel" style="max-width:520px"><button class="btn full" data-checkout-login="${esc(id)}">Masuk / Daftar Pelanggan</button>${state.user?.role==='admin'?'<p class="tiny center">Kamu sedang login sebagai Admin. Masuk dengan akun pelanggan untuk membuat pesanan.</p>':''}</div></div></section>`;
   }
   const manual = state.catalog.settings.paymentMode === 'manual';
+  const banksAvailable = state.catalog.banks?.length > 0;
+  const maxQty = p.stock > 0 ? Math.max(1, Math.min(5, Number(p.stock))) : 5;
+  const qtyOptions = Array.from({length:maxQty},(_,i)=>i+1).map(n=>`<option value="${n}">${n}</option>`).join('');
+  const paymentBox = manual
+    ? (banksAvailable
+      ? `<div class="panel"><h2>Pilih rekening</h2><label class="field">Bank<select name="bankId" required>${state.catalog.banks.map(b=>`<option value="${esc(b.id)}">${esc(b.name)} · ${esc(b.holder)}</option>`).join('')}</select></label><p class="tiny">Nomor rekening lengkap akan tampil setelah pesanan berhasil dibuat.</p></div>`
+      : `<div class="notice warn"><strong>Checkout belum siap.</strong><br>Belum ada rekening pembayaran aktif. Hubungi admin atau aktifkan rekening dari Panel Admin.</div>`)
+    : `<div class="notice ok"><strong>Pembayaran otomatis aktif.</strong><br>Setelah pesanan dibuat kamu akan diarahkan ke halaman pembayaran Midtrans.</div>`;
   return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Checkout</div><h1>${esc(p.name)}</h1><p>${money(p.price)} · ${esc(p.duration)}</p></div>
-  <form id="checkoutForm" data-product="${esc(p.id)}" class="two"><div class="stack"><div class="panel"><h2>Kontak penerima</h2><div class="row"><label class="field">Nama<input name="name" required value="${esc(state.user.name)}"></label><label class="field">Email<input value="${esc(state.user.email)}" readonly></label></div><label class="field">Nomor WhatsApp<input name="phone" placeholder="081234567890"></label><label class="field">Kirim detail melalui<select name="channel"><option value="email">Email</option><option value="whatsapp">WhatsApp</option></select></label></div>
-  ${manual?`<div class="panel"><h2>Pilih rekening</h2><label class="field">Bank<select name="bankId">${state.catalog.banks.map(b=>`<option value="${esc(b.id)}">${esc(b.name)} · ${esc(b.holder)}</option>`).join('')}</select></label></div>`:`<div class="notice ok">Pembayaran otomatis aktif. Setelah pesanan dibuat kamu akan diarahkan ke halaman pembayaran Midtrans.</div>`}</div>
-  <aside class="panel order-summary"><h2>Ringkasan</h2><div class="summary-product"><div>${icon(p)}</div><div><strong>${esc(p.name)}</strong><span>${esc(p.duration)}</span></div></div><label class="field">Jumlah<select name="quantity">${[1,2,3,4,5].map(n=>`<option>${n}</option>`).join('')}</select></label><div class="summary-row"><span>Harga satuan</span><strong>${money(p.price)}</strong></div><div class="summary-row total"><span>Total awal</span><strong>${money(p.price)}</strong></div><label class="check"><input type="checkbox" required> Saya sudah membaca dan menyetujui ketentuan produk.</label><button class="btn full" type="submit">Buat Pesanan</button></aside></form></div></section>`;
+  <form id="checkoutForm" data-product="${esc(p.id)}" class="two"><div class="stack"><div class="panel"><h2>Kontak penerima</h2><div class="row"><label class="field">Nama<input name="name" required minlength="2" maxlength="80" value="${esc(state.user.name)}"></label><label class="field">Email<input value="${esc(state.user.email)}" readonly></label></div><label class="field">Nomor WhatsApp <small>Wajib jika detail dikirim lewat WhatsApp.</small><input name="phone" type="tel" maxlength="24" placeholder="081234567890"></label><label class="field">Kirim detail melalui<select name="channel" id="checkoutChannel"><option value="email">Email</option><option value="whatsapp">WhatsApp</option></select></label></div>${paymentBox}</div>
+  <aside class="panel order-summary"><h2>Ringkasan</h2><div class="summary-product"><div>${icon(p)}</div><div><strong>${esc(p.name)}</strong><span>${esc(p.duration)}</span></div></div><label class="field">Jumlah<select name="quantity" id="checkoutQuantity">${qtyOptions}</select></label><div class="summary-row"><span>Harga satuan</span><strong>${money(p.price)}</strong></div><div class="summary-row total"><span>Total pembayaran</span><strong id="checkoutTotal">${money(p.price)}</strong></div><label class="check"><input type="checkbox" name="agree" required> Saya sudah membaca dan menyetujui ketentuan produk.</label><div id="checkoutError" class="form-inline-error" hidden></div><button class="btn full" type="submit" ${manual&&!banksAvailable?'disabled':''}>${manual?'Buat Pesanan':'Bayar Sekarang'}</button><p class="tiny center">Pesanan baru dibuat setelah tombol ini ditekan.</p></aside></form></div></section>`;
 }
-
 function ordersPage(){
   if(!state.user || state.user.role!=='user') return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Pesanan</div><h1>Pantau pesananmu</h1><p>Masuk untuk melihat riwayat pesanan.</p></div><div class="panel" style="max-width:520px"><button class="btn" data-open-login>Masuk pelanggan</button></div></div></section>`;
   if(!state.orders.length) return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Pesanan</div><h1>Belum ada pesanan</h1><p>Produk digital pertamamu menunggu.</p></div><a class="btn" href="#katalog">Lihat produk</a></div></section>`;
@@ -325,6 +335,12 @@ app.addEventListener('change', e => {
   if(e.target.id==='adminOrderStatus'){ state.adminOrderStatus=e.target.value; $('#adminContent').innerHTML=adminContent(); }
   if(e.target.id==='inventoryProductFilter'){ state.inventoryProduct=e.target.value; $('#adminContent').innerHTML=adminContent(); }
   if(e.target.id==='inventoryStatusFilter'){ state.inventoryStatus=e.target.value; $('#adminContent').innerHTML=adminContent(); }
+  if(e.target.id==='checkoutQuantity'){
+    const form=e.target.closest('#checkoutForm'); const p=state.catalog.products.find(x=>x.id===form?.dataset.product); const out=$('#checkoutTotal'); if(p&&out) out.textContent=money(Number(p.price)*Number(e.target.value||1));
+  }
+  if(e.target.id==='checkoutChannel'){
+    const form=e.target.closest('#checkoutForm'); const phoneInput=form?.elements?.phone; if(phoneInput) phoneInput.required=e.target.value==='whatsapp';
+  }
 });
 
 app.addEventListener('click', async e => {
@@ -335,7 +351,16 @@ app.addEventListener('click', async e => {
   const editP = e.target.closest('[data-edit-product]'); if(editP){ editProduct(editP.dataset.editProduct); return; }
   const editB = e.target.closest('[data-edit-bank]'); if(editB){ editBank(editB.dataset.editBank); return; }
   const ao = e.target.closest('[data-admin-order]'); if(ao){ adminOrderModal(ao.dataset.adminOrder); return; }
-  const checkout = e.target.closest('[data-checkout]'); if(checkout){ closeModal(); location.hash='#checkout/'+encodeURIComponent(checkout.dataset.checkout); return; }
+  const checkout = e.target.closest('[data-checkout]'); if(checkout){
+    const id=checkout.dataset.checkout; const p=state.catalog?.products?.find(x=>x.id===id);
+    if(!p){msg('Produk tidak ditemukan.');return;}
+    if(!state.catalog.settings.storeOpen){msg('Toko sedang menutup pesanan baru.');return;}
+    if(p.stock===0){msg('Stok produk sedang habis.');return;}
+    state.pendingCheckout=id; closeModal();
+    if(!state.user || state.user.role!=='user'){openModal('Masuk untuk checkout',loginForm(false)+`<p class="tiny center">Setelah berhasil masuk, kamu akan langsung kembali ke checkout ${esc(p.name)}.</p>`);return;}
+    state.pendingCheckout=''; location.hash='#checkout/'+encodeURIComponent(id); if((location.hash||'')==='#checkout/'+encodeURIComponent(id)) await route(); return;
+  }
+  const checkoutLogin=e.target.closest('[data-checkout-login]'); if(checkoutLogin){state.pendingCheckout=checkoutLogin.dataset.checkoutLogin;openModal('Masuk untuk checkout',loginForm(false));return;}
   const pay = e.target.closest('[data-pay]'); if(pay){ try{const r=await api('retryPayment',{orderId:pay.dataset.pay}); if(r.paymentUrl) location.href=r.paymentUrl;}catch(err){msg(err.message)} return; }
   const cancel = e.target.closest('[data-cancel]'); if(cancel){ if(confirm('Batalkan pesanan ini?')){try{await api('cancelOrder',{orderId:cancel.dataset.cancel});state.orders=await api('orders');await route();msg('Pesanan dibatalkan.')}catch(err){msg(err.message)}}return; }
   const proof = e.target.closest('[data-proof]'); if(proof){ try{const r=await api('getProof',{orderId:proof.dataset.proof}); const url=`data:${r.mime};base64,${r.base64}`; window.open(url,'_blank','noopener,noreferrer');}catch(err){msg(err.message)} return; }
@@ -358,16 +383,21 @@ document.addEventListener('submit', async e => {
   try{
     const fd = new FormData(f); const g=k=>String(fd.get(k)||'');
     if(f.id==='userLogin'){
-      const r=await api('login',{email:g('email'),password:g('password')});state.token=r.token;state.user=r.user;localStorage.setItem('uply_token',r.token);setAccount();closeModal();msg('Berhasil masuk.');await route();
+      const r=await api('login',{email:g('email'),password:g('password')});state.token=r.token;state.user=r.user;localStorage.setItem('uply_token',r.token);setAccount();closeModal();msg('Berhasil masuk.');if(state.pendingCheckout){const id=state.pendingCheckout;state.pendingCheckout='';location.hash='#checkout/'+encodeURIComponent(id);await route();}else await route();
     } else if(f.id==='register'){
       if(g('password')!==g('password2')) throw Error('Ulangi password harus sama.');
-      const r=await api('register',{name:g('name'),email:g('email'),password:g('password')});state.token=r.token;state.user=r.user;localStorage.setItem('uply_token',r.token);setAccount();closeModal();msg('Akun berhasil dibuat.');await route();
+      const r=await api('register',{name:g('name'),email:g('email'),password:g('password')});state.token=r.token;state.user=r.user;localStorage.setItem('uply_token',r.token);setAccount();closeModal();msg('Akun berhasil dibuat.');if(state.pendingCheckout){const id=state.pendingCheckout;state.pendingCheckout='';location.hash='#checkout/'+encodeURIComponent(id);await route();}else await route();
     } else if(f.id==='adminLogin'){
       const r=await api('adminLogin',{email:g('email'),password:g('password')});state.token=r.token;state.user=r.user;localStorage.setItem('uply_token',r.token);setAccount();msg('Login admin berhasil.');await route();
     } else if(f.id==='checkoutForm'){
+      if(!fd.has('agree')) throw Error('Centang persetujuan ketentuan produk terlebih dahulu.');
+      if(g('channel')==='whatsapp' && !g('phone').trim()) throw Error('Isi nomor WhatsApp jika detail ingin dikirim lewat WhatsApp.');
+      if(state.catalog.settings.paymentMode==='manual' && !g('bankId')) throw Error('Belum ada rekening pembayaran aktif. Hubungi admin.');
       const req=(crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2));
-      const r=await api('createOrder',{productId:f.dataset.product,requestId:req,quantity:Number(g('quantity')),name:g('name'),phone:g('phone'),channel:g('channel'),bankId:g('bankId')});
-      state.orders=await api('orders'); if(r.paymentUrl){msg('Pesanan dibuat. Membuka pembayaran…');setTimeout(()=>location.href=r.paymentUrl,500)}else{location.hash='#pesanan/'+encodeURIComponent(r.order.id);msg('Pesanan dibuat. Lanjutkan pembayaran.')}
+      const r=await api('createOrder',{productId:f.dataset.product,requestId:req,quantity:Number(g('quantity')),name:g('name'),phone:g('phone'),channel:g('channel'),bankId:g('bankId'),agree:true});
+      state.orders=await api('orders');
+      if(r.paymentUrl){msg('Pesanan dibuat. Membuka pembayaran…');setTimeout(()=>location.assign(r.paymentUrl),650)}
+      else{location.hash='#pesanan/'+encodeURIComponent(r.order.id);await route();msg('Pesanan berhasil dibuat. Lanjutkan pembayaran.')}
     } else if(f.id==='proofForm'){
       const file=f.elements.proof.files[0];if(!file)throw Error('Pilih file bukti.');if(file.size>1100000)throw Error('Ukuran bukti maksimal sekitar 1 MB.');
       const base64=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(file)});

@@ -1,35 +1,15 @@
-# Hasil Pengujian Uply Digital V8
+# Hasil Pengujian Uply Digital V9
 
-Pengecekan lokal yang dilakukan:
+Pengujian statis yang dilakukan sebelum paket dibuat:
 
-- `app.js`: syntax check lulus.
-- `api/uply.js`: syntax check lulus.
-- `api/health.js`: syntax check lulus.
-- `api/payment-webhook.js`: syntax check lulus.
-- `lib/db.js`: syntax check lulus.
-- `lib/security.js`: syntax check lulus.
-- `lib/midtrans.js`: syntax check lulus.
-- `lib/email.js`: syntax check lulus.
-- Referensi logo frontend diarahkan ke `assets/logo-uply-digital.png`.
-- Teks teknis homepage lama sudah dihapus.
-- Backend menyediakan `inventoryAdd` dan `inventorySetStatus`.
-- Schema migration menambahkan `inventory.note` dengan `ALTER TABLE ... IF NOT EXISTS`, sehingga database lama dapat diperbarui tanpa menghapus data.
+- `node --check app.js` — LULUS
+- `node --check api/uply.js` — LULUS
+- `node --check api/health.js` — LULUS
+- `node --check api/payment-webhook.js` — LULUS
+- `node --check lib/db.js` — LULUS
+- `node --check lib/security.js` — LULUS
+- `node --check lib/midtrans.js` — LULUS
+- Struktur ZIP root berisi `index.html`, `app.js`, `styles.css`, `package.json`, `vercel.json`, `api/`, `lib/`, dan `assets/`.
+- Alur checkout sekarang memvalidasi login pelanggan, status toko, stok, rekening manual, persetujuan S&K, channel WhatsApp, quantity, dan pesan error API.
 
-Belum bisa diuji secara end-to-end tanpa kredensial/database pengguna:
-
-- koneksi Neon/PostgreSQL nyata;
-- login admin Vercel production;
-- transaksi Midtrans Sandbox;
-- webhook Midtrans nyata;
-- pengiriman email provider production.
-
-Setelah deploy, lakukan tes berurutan:
-
-1. `/api/health`
-2. Login admin
-3. Tambah 1 inventory
-4. Daftar pelanggan
-5. Checkout manual
-6. Verifikasi admin
-7. Midtrans Sandbox
-8. Auto-delivery inventory
+Pengujian transaksi nyata PostgreSQL/Midtrans tetap perlu dilakukan setelah deployment karena membutuhkan Environment Variables dan akun gateway milik pengguna.
