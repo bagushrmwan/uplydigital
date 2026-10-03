@@ -1,21 +1,31 @@
-UPLY DIGITAL V10 — UPDATE TERBARU
+UPLY DIGITAL V11 — DESKTOP + MOBILE
 
-1. Replace seluruh file repository GitHub dengan isi folder/ZIP V10.
-2. Commit ke branch main.
-3. Tunggu deployment Vercel sampai Ready/Production.
-4. Environment Variables lama tetap dipakai; tidak perlu membuat database baru.
-5. Buka website lalu Ctrl + Shift + R.
+V11 bukan dua project terpisah. Satu project otomatis menyesuaikan tampilannya berdasarkan ukuran layar.
 
-TEST WAJIB:
-- Login sebagai pelanggan.
-- Detail produk -> Lanjut checkout.
-- Klik/isi Nama, WhatsApp, channel, bank, qty: modal detail produk TIDAK boleh muncul lagi.
-- Buat pesanan.
-- Transfer manual -> upload bukti: invoice sementara harus muncul.
-- Admin verifikasi -> Processing: invoice berubah menjadi pembayaran terverifikasi/diproses.
-- Admin selesai / auto inventory: invoice final menampilkan status Selesai.
-- Tombol Cetak / Simpan PDF membuka dialog print browser.
+CARA UPDATE:
+1. Extract Uply-Digital-V11-Responsive-READY.zip.
+2. Replace seluruh file project GitHub lama dengan isi ZIP.
+3. Commit ke branch main.
+4. Tunggu Vercel Production Deployment selesai.
+5. Environment Variables dan database lama tetap digunakan.
+6. Buka website lalu Ctrl+Shift+R / Incognito.
 
-CATATAN:
-- Untuk Midtrans, invoice muncul setelah webhook pembayaran berhasil memperbarui order.
-- Database V10 menambah kolom timestamp invoice otomatis tanpa menghapus data lama.
+TEST DESKTOP:
+- Buka website di laptop/PC.
+- Hero harus dua kolom.
+- Produk maksimal 4 kolom.
+- Dashboard pelanggan memiliki sidebar.
+
+TEST MOBILE:
+- Buka website dari HP, atau Chrome DevTools > Toggle device toolbar.
+- Header tetap menampilkan logo + teks Uply Digital.
+- Muncul bottom navigation: Beranda / Produk / Dashboard / Pesanan.
+- Produk menjadi card satu kolom.
+- Checkout menjadi satu kolom.
+
+URL PENTING:
+/#katalog    Beranda + produk
+/#dashboard  Dashboard pelanggan
+/#pesanan    Riwayat pesanan
+/#admin      Panel admin
+/api/health  Cek backend/database

@@ -1,57 +1,38 @@
-# Uply Digital V10 — Vercel Native
+# Uply Digital V11 — Responsive Desktop + Mobile
 
-Versi V10 memperbaiki alur checkout dan menambahkan invoice pelanggan yang mengikuti status pembayaran/pemrosesan. Arsitektur tetap Vercel + PostgreSQL/Neon dan tetap mendukung transfer manual maupun Midtrans.
+Versi V11 mengembangkan V10 menjadi UI adaptif dengan pengalaman desktop dan mobile yang sengaja dibedakan, tetapi tetap dalam **satu codebase** agar mudah dirawat dan otomatis menyesuaikan perangkat.
 
-## Yang diperbaiki
+## Desktop experience
+- Navigasi penuh dan brand Uply Digital.
+- Hero besar dengan featured products.
+- Grid produk 4/3/2 kolom mengikuti lebar layar.
+- Customer Dashboard dengan sidebar dan statistik.
+- Checkout dua kolom.
+- Admin dashboard untuk layar lebar.
 
-### Checkout
-Bug V9 berasal dari atribut `data-product` yang dipakai sekaligus oleh tombol detail dan form checkout. Setelah event klik dipindah ke level document agar tombol dalam modal bisa bekerja, klik input checkout ikut dianggap sebagai klik detail produk.
+## Mobile experience
+- Nama Uply Digital tetap terlihat di header.
+- Bottom navigation fixed.
+- Produk card horizontal satu kolom.
+- Dashboard pelanggan berbasis card.
+- Checkout single-column dengan input touch-friendly.
+- Admin navigation horizontal-scroll.
+- Invoice responsif.
 
-V10 memisahkan atribut menjadi:
-- `data-view-product` untuk tombol detail produk.
-- `data-product-id` untuk form checkout.
+## Backend
+Backend tetap Vercel Native + PostgreSQL seperti V10. Tidak ada Google Apps Script.
 
-Hasilnya: pelanggan dapat mengisi form checkout tanpa popup detail produk muncul kembali.
+Environment Variables lama tetap dipakai:
+- DATABASE_URL
+- ADMIN_EMAIL
+- ADMIN_PASSWORD
+- SESSION_SECRET
+- PAYMENT_MODE
+- SITE_URL
+- MIDTRANS_SERVER_KEY (jika Midtrans aktif)
+- MIDTRANS_IS_PRODUCTION
+- RESEND_API_KEY (opsional)
+- EMAIL_FROM (opsional)
 
-### Invoice pelanggan
-Invoice muncul setelah pembayaran dikirim dan terus diperbarui sampai order selesai. Isinya:
-- nomor invoice dan order,
-- tanggal order,
-- metode pembayaran,
-- status pembayaran dan pesanan,
-- timeline pembayaran dikirim -> terverifikasi -> diproses -> selesai,
-- nama/email/WhatsApp pelanggan,
-- produk, durasi, harga satuan, jumlah, subtotal, total,
-- rekening tujuan untuk transfer manual,
-- tombol Cetak / Simpan PDF.
-
-### Timestamp database baru
-V10 menambahkan secara otomatis:
-- `payment_submitted_at`
-- `payment_verified_at`
-- `processing_at`
-- `completed_at`
-
-Migrasi menggunakan `ADD COLUMN IF NOT EXISTS`, jadi database lama tidak perlu dihapus.
-
-## Instalasi update
-1. Replace file repository GitHub dengan seluruh isi V10.
-2. Commit ke branch Production (`main` pada setup kamu).
-3. Tunggu Vercel membuat Production Deployment baru.
-4. Tidak perlu mengubah Environment Variables jika V9 sebelumnya sudah terhubung.
-5. Refresh website dengan Ctrl+Shift+R.
-
-## Environment Variables utama
-- `DATABASE_URL`
-- `ADMIN_EMAIL`
-- `ADMIN_PASSWORD`
-- `SESSION_SECRET`
-- `PAYMENT_MODE`
-- `SITE_URL`
-
-Untuk Midtrans juga gunakan:
-- `MIDTRANS_SERVER_KEY`
-- `MIDTRANS_IS_PRODUCTION`
-
-## Test setelah deploy
-Lihat `MULAI-DARI-SINI.txt` dan `HASIL-PENGUJIAN.md`.
+## Deployment
+Replace semua file repository GitHub dengan V11, commit ke `main`, dan tunggu Vercel membuat Production Deployment.

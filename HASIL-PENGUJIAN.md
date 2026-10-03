@@ -1,29 +1,17 @@
-# Hasil Pengujian Uply Digital V10
+# Hasil Pengujian V11
 
-## Lulus — syntax
-- `app.js`
-- `api/uply.js`
-- `api/health.js`
-- `api/payment-webhook.js`
-- seluruh file `lib/*.js`
+Pengecekan lokal yang dilakukan:
+- JavaScript frontend syntax: PASS
+- API uply.js syntax: PASS
+- API health.js syntax: PASS
+- Midtrans webhook syntax: PASS
+- Library database/security/midtrans/email syntax: PASS
+- Header memiliki logo + teks `Uply Digital`: PASS
+- Mobile bottom navigation tersedia: PASS
+- Route `#dashboard`: PASS
+- Mobile breakpoints 760px / 420px tersedia: PASS
+- Desktop product grid 4 kolom: PASS
+- Checkout tetap menggunakan backend V10: PASS
+- Invoice V10 dipertahankan: PASS
 
-Semua diperiksa menggunakan `node --check`.
-
-## Lulus — checkout regression
-- Tombol detail menggunakan `data-view-product`.
-- Form checkout menggunakan `data-product-id`.
-- Tidak ada lagi click selector umum `[data-product]`.
-- Event checkout memakai listener document sehingga tombol di modal tetap bekerja.
-- Input Nama/WhatsApp/Bank/Quantity tidak lagi memenuhi selector tombol detail produk.
-
-## Lulus — invoice
-- Invoice UI tersedia setelah pembayaran dikirim/status review/processing/completed.
-- Tombol Cetak / Simpan PDF tersedia.
-- API mengirim timestamp payment submitted, verified, processing, completed.
-- Upload bukti manual mencatat `payment_submitted_at`.
-- Verifikasi admin mencatat pembayaran/proses/selesai.
-- Midtrans webhook mencatat pembayaran terverifikasi dan processing.
-- Auto inventory mencatat completed timestamp.
-
-## Catatan pengujian nyata
-Koneksi produksi ke akun Vercel, Neon/PostgreSQL, Midtrans, email, dan browser pelanggan tetap harus diuji pada deployment milik pengguna karena kredensial production tidak tersedia di environment pengembangan ini.
+Catatan: transaksi live, Midtrans live, dan koneksi database production tetap harus dites di deployment Vercel milik pengguna karena kredensial production tidak tersedia di lingkungan pengujian lokal.

@@ -16,8 +16,10 @@
         <img class="brand-mark" src="/assets/logo-mark.png" alt="">
         <span class="brand-word">Uply Digital</span>
       </a>
-      <nav aria-label="Navigasi utama">
-        <a href="#katalog">Produk</a>
+      <nav class="desktop-nav" aria-label="Navigasi utama">
+        <a href="#katalog">Beranda</a>
+        <button class="nav-link-button" type="button" data-scroll-products>Produk</button>
+        <a href="#dashboard">Dashboard</a>
         <a href="#pesanan">Pesanan</a>
         <a href="#bantuan">Bantuan</a>
       </nav>
@@ -26,6 +28,13 @@
   </header>
 
   <main id="app"><div class="loading">Menyiapkan Uply Digital…</div></main>
+
+  <nav class="mobile-bottom-nav" aria-label="Navigasi mobile">
+    <a href="#katalog" data-mobile-nav="katalog"><span class="mobile-nav-icon">⌂</span><span>Beranda</span></a>
+    <button type="button" data-scroll-products data-mobile-nav="produk"><span class="mobile-nav-icon">▦</span><span>Produk</span></button>
+    <a href="#dashboard" data-mobile-nav="dashboard"><span class="mobile-nav-icon">◫</span><span>Dashboard</span></a>
+    <a href="#pesanan" data-mobile-nav="pesanan"><span class="mobile-nav-icon">≡</span><span>Pesanan</span></a>
+  </nav>
 
   <footer>
     <div class="wrap footer">

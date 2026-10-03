@@ -86,31 +86,28 @@ function status(s){ return `<span class="status ${esc(s)}">${esc(statusLabel[s] 
 function inventoryStatus(s){ return `<span class="status inv-${esc(s)}">${esc(inventoryStatusLabel[s] || s)}</span>`; }
 
 function hero(){
-  return `<section class="hero">
-    <div class="wrap hero-grid">
+  const products = state.catalog?.products || [];
+  const featured = products.find(p=>p.badge) || products[0];
+  const minis = products.filter(p=>!featured || p.id!==featured.id).slice(0,3);
+  const featuredHtml = featured ? `<div class="featured-main">
+      <div class="featured-top"><span class="featured-badge">${esc(featured.badge || 'Pilihan Uply')}</span><span class="stock-dot ${featured.stock===0?'off':''}"></span></div>
+      <div class="featured-product-cover ${esc(featured.icon)}">${icon(featured)}<span>${esc(featured.duration)}</span></div>
+      <div class="featured-product-info"><div><small>${esc(featured.category)}</small><h3>${esc(featured.name)}</h3><strong>${money(featured.price)}</strong></div><button class="btn small" data-view-product="${esc(featured.id)}" ${featured.stock===0?'disabled':''}>Beli sekarang</button></div>
+    </div>` : '';
+  const miniHtml = minis.length ? `<div class="featured-mini-grid">${minis.map(p=>`<button class="featured-mini" data-view-product="${esc(p.id)}" ${p.stock===0?'disabled':''}><span class="featured-mini-cover ${esc(p.icon)}">${icon(p)}</span><span><small>${esc(p.category)}</small><b>${esc(p.name)}</b><strong>${money(p.price)}</strong></span></button>`).join('')}</div>` : '';
+  return `<section class="hero v11-hero">
+    <div class="wrap hero-grid v11-hero-grid">
       <div class="hero-copy">
-        <div class="eyebrow">Your Everyday Digital Store</div>
-        <h1>Kebutuhan digital.<br><em>Lebih simpel.</em></h1>
-        <p>Pilih produk, checkout, bayar, lalu pantau prosesnya langsung dari akun Uply Digital.</p>
-        <div class="hero-actions"><a class="btn hero-cta" href="#produk">Lihat produk</a><a class="hero-link" href="#bantuan">Cara belanja →</a></div>
-        <div class="trust-row">
-          <span>✓ Proses jelas</span><span>✓ Pembayaran fleksibel</span><span>✓ Bantuan admin</span>
-        </div>
+        <div class="hero-provider-pill">✦ Your Everyday Digital Store</div>
+        <h1>Premium digital.<br><em>Lebih simpel.</em></h1>
+        <p>Temukan kebutuhan hiburan, AI, top up, dan layanan digital favoritmu dalam satu tempat. Checkout mudah dan status pesanan bisa dipantau dari akunmu.</p>
+        <div class="hero-actions"><button class="btn hero-cta" type="button" data-scroll-products>Beli Sekarang</button><button class="btn hero-secondary" type="button" data-open-register>Daftar Gratis</button></div>
+        <div class="trust-row"><span>✓ Proses jelas</span><span>✓ Pembayaran fleksibel</span><span>✓ Bantuan admin</span></div>
       </div>
-      <div class="hero-card brand-showcase">
-        <img src="/assets/logo-uply-digital.png" alt="Uply Digital">
-        <h3>Belanja digital, tanpa ribet.</h3>
-        <p>Semua kebutuhan digital favoritmu dalam satu tempat dengan proses yang rapi, cepat, dan mudah dipantau.</p>
-        <div class="mini-features">
-          <span><b>01</b> Pilih produk</span>
-          <span><b>02</b> Checkout mudah</span>
-          <span><b>03</b> Pantau pesanan</span>
-        </div>
-      </div>
+      <div class="featured-showcase">${featuredHtml}${miniHtml}</div>
     </div>
   </section>`;
 }
-
 function productCards(){
   const arr = state.catalog.products.filter(p =>
     (state.filter === 'Semua' || p.category === state.filter) &&
@@ -139,15 +136,18 @@ function valueSection(){
 
 function catalogPage(){
   const cats = ['Semua', ...new Set(state.catalog.products.map(p=>p.category))];
-  return hero() + `<section id="produk" class="section"><div class="wrap">
-    <div class="section-head"><div><div class="section-kicker">Katalog</div><h2>Pilih kebutuhanmu</h2><p>${state.catalog.products.length} produk tersedia.</p></div><input id="search" class="search" placeholder="Cari produk…" value="${esc(state.search)}"></div>
+  return hero() + `<section class="catalog-search-band"><div class="wrap">
+    <div class="catalog-search-box"><span>⌕</span><input id="search" placeholder="Cari Netflix, AI, top up, layanan digital…" value="${esc(state.search)}"><button class="btn small" type="button" data-focus-products>Cari</button></div>
+    <div class="quick-categories"><span>Cepat:</span>${cats.slice(1,7).map(c=>`<button class="quick-chip" data-filter="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+  </div></section>
+  <section id="produk" class="section product-section"><div class="wrap">
+    <div class="section-head product-heading"><div><div class="section-kicker">Produk Digital Premium</div><h2>Koleksi pilihan Uply Digital</h2><p>Temukan produk yang sesuai kebutuhanmu dengan proses pembelian yang lebih praktis.</p></div><div class="catalog-count">${state.catalog.products.length} produk</div></div>
     ${state.catalog.settings.notice?`<div class="notice">${esc(state.catalog.settings.notice)}</div>`:''}
     ${!state.catalog.settings.storeOpen?`<div class="notice warn">Toko sedang menutup pesanan baru.</div>`:''}
-    <div class="chips">${cats.map(c=>`<button class="chip ${state.filter===c?'active':''}" data-filter="${esc(c)}">${esc(c)}</button>`).join('')}</div>
-    <div class="grid" id="productGrid">${productCards()}</div>
+    <div class="chips category-tabs">${cats.map(c=>`<button class="chip ${state.filter===c?'active':''}" data-filter="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+    <div class="grid product-grid-v11" id="productGrid">${productCards()}</div>
   </div></section>` + valueSection();
 }
-
 function helpPage(){
   return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Bantuan</div><h1>Belanja lebih jelas.</h1><p>Pembayaran bisa transfer manual atau otomatis melalui Midtrans, tergantung pengaturan toko.</p></div>
   <div class="guide-grid">
@@ -167,10 +167,9 @@ function registerForm(){
 }
 
 function accountModal(){
-  if (!state.user){ openModal('Masuk pelanggan', loginForm(false)); return; }
-  openModal('Akun kamu', `<div class="notice"><strong>${esc(state.user.name)}</strong><br>${esc(state.user.email)}</div><div class="stack">${state.user.role==='admin'?`<a class="btn" href="#admin" data-close>Panel admin</a>`:`<a class="btn" href="#pesanan" data-close>Pesanan saya</a>`}<button class="btn danger" data-logout>Keluar</button></div>`);
+  if (!state.user){ openModal('Masuk ke Uply Digital', loginForm(false)); return; }
+  openModal('Akun Uply Digital', `<div class="account-summary"><div class="account-avatar">${esc((state.user.name||'U').slice(0,1).toUpperCase())}</div><div><strong>${esc(state.user.name)}</strong><small>${esc(state.user.email)}</small></div></div><div class="stack account-actions">${state.user.role==='admin'?`<a class="btn" href="#admin" data-close>Panel Admin</a>`:`<a class="btn" href="#dashboard" data-close>Dashboard Saya</a><a class="btn light" href="#pesanan" data-close>Pesanan Saya</a>`}<button class="btn danger" data-logout>Keluar</button></div>`);
 }
-
 function productModal(id){
   const p = state.catalog.products.find(x=>x.id===id); if(!p) return;
   const unavailable = !state.catalog.settings.storeOpen || p.stock===0;
@@ -199,6 +198,25 @@ function checkoutPage(id){
   <form id="checkoutForm" data-product-id="${esc(p.id)}" class="two"><div class="stack"><div class="panel"><h2>Kontak penerima</h2><div class="row"><label class="field">Nama<input name="name" required minlength="2" maxlength="80" value="${esc(state.user.name)}"></label><label class="field">Email<input value="${esc(state.user.email)}" readonly></label></div><label class="field">Nomor WhatsApp <small>Wajib jika detail dikirim lewat WhatsApp.</small><input name="phone" type="tel" maxlength="24" placeholder="081234567890"></label><label class="field">Kirim detail melalui<select name="channel" id="checkoutChannel"><option value="email">Email</option><option value="whatsapp">WhatsApp</option></select></label></div>${paymentBox}</div>
   <aside class="panel order-summary"><h2>Ringkasan</h2><div class="summary-product"><div>${icon(p)}</div><div><strong>${esc(p.name)}</strong><span>${esc(p.duration)}</span></div></div><label class="field">Jumlah<select name="quantity" id="checkoutQuantity">${qtyOptions}</select></label><div class="summary-row"><span>Harga satuan</span><strong>${money(p.price)}</strong></div><div class="summary-row total"><span>Total pembayaran</span><strong id="checkoutTotal">${money(p.price)}</strong></div><label class="check"><input type="checkbox" name="agree" required> Saya sudah membaca dan menyetujui ketentuan produk.</label><div id="checkoutError" class="form-inline-error" hidden></div><button class="btn full" type="submit" ${manual&&!banksAvailable?'disabled':''}>${manual?'Buat Pesanan':'Bayar Sekarang'}</button><p class="tiny center">Pesanan baru dibuat setelah tombol ini ditekan.</p></aside></form></div></section>`;
 }
+function customerDashboard(){
+  if(!state.user || state.user.role!=='user') return `<section class="page customer-shell"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Dashboard Pelanggan</div><h1>Masuk untuk melihat akunmu</h1><p>Pantau transaksi, pesanan, dan status pembelian dari satu tempat.</p></div><div class="panel" style="max-width:520px"><button class="btn full" data-open-login>Masuk pelanggan</button></div></div></section>`;
+  const completed=state.orders.filter(o=>o.status==='completed');
+  const active=state.orders.filter(o=>['pending_payment','review','processing'].includes(o.status));
+  const spent=completed.reduce((n,o)=>n+Number(o.total||0),0);
+  const recent=state.orders.slice(0,6);
+  return `<section class="page customer-shell"><div class="wrap customer-layout">
+    <aside class="customer-sidebar">
+      <div class="customer-profile"><div class="customer-avatar">${esc((state.user.name||'U').slice(0,1).toUpperCase())}</div><div><strong>${esc(state.user.name)}</strong><small>${esc(state.user.email)}</small></div></div>
+      <nav><a class="active" href="#dashboard">⌂ Dashboard</a><a href="#pesanan">≡ Pesanan Saya</a><button type="button" data-scroll-products>▦ Belanja Produk</button><a href="#bantuan">? Bantuan</a></nav>
+    </aside>
+    <div class="customer-main">
+      <div class="customer-welcome"><div><div class="section-kicker">Akun Pelanggan</div><h1>Halo, ${esc(state.user.name.split(' ')[0])} 👋</h1><p>Selamat datang kembali di Uply Digital.</p></div><button class="btn light small" type="button" data-scroll-products>Belanja Sekarang</button></div>
+      <div class="customer-stats"><article><span>Total transaksi</span><strong>${state.orders.length}</strong><small>${active.length} masih berjalan</small></article><article><span>Pesanan selesai</span><strong>${completed.length}</strong><small>Produk berhasil diterima</small></article><article><span>Total belanja selesai</span><strong>${money(spent)}</strong><small>Akumulasi order selesai</small></article></div>
+      <div class="panel customer-orders-panel"><div class="panel-title"><div><h2>Order terbaru</h2><p>Riwayat transaksi terakhir akunmu.</p></div><a class="text-btn" href="#pesanan">Lihat semua</a></div>${recent.length?`<div class="customer-order-table">${recent.map(o=>`<a class="customer-order-row" href="#pesanan/${encodeURIComponent(o.id)}"><div><small>${esc(o.id)}</small><strong>${esc(o.productName)}</strong><span>${dt(o.createdAt)}</span></div><div><strong>${money(o.total)}</strong>${status(o.status)}</div><b>›</b></a>`).join('')}</div>`:`<div class="empty compact"><p>Belum ada pesanan.</p><button class="btn small" data-scroll-products>Mulai belanja</button></div>`}</div>
+    </div>
+  </div></section>`;
+}
+
 function ordersPage(){
   if(!state.user || state.user.role!=='user') return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Pesanan</div><h1>Pantau pesananmu</h1><p>Masuk untuk melihat riwayat pesanan.</p></div><div class="panel" style="max-width:520px"><button class="btn" data-open-login>Masuk pelanggan</button></div></div></section>`;
   if(!state.orders.length) return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Pesanan</div><h1>Belum ada pesanan</h1><p>Produk digital pertamamu menunggu.</p></div><a class="btn" href="#katalog">Lihat produk</a></div></section>`;
@@ -360,10 +378,18 @@ async function refreshAdmin(){
   const target = $('#adminContent'); if(target) target.innerHTML = adminContent();
 }
 
+function updateResponsiveNav(hash){
+  const key = hash.startsWith('pesanan') ? 'pesanan' : hash==='dashboard' ? 'dashboard' : 'katalog';
+  document.querySelectorAll('[data-mobile-nav]').forEach(el=>el.classList.toggle('active',el.dataset.mobileNav===key));
+  document.body.dataset.route = key;
+}
+
 async function route(){
   if(!state.catalog) await loadCatalog();
   const hash = (location.hash || '#katalog').slice(1);
+  updateResponsiveNav(hash);
   if(hash==='katalog' || hash==='') app.innerHTML = catalogPage();
+  else if(hash==='dashboard'){ if(state.user?.role==='user') state.orders = await api('orders'); app.innerHTML = customerDashboard(); }
   else if(hash==='bantuan') app.innerHTML = helpPage();
   else if(hash.startsWith('checkout/')) app.innerHTML = checkoutPage(decodeURIComponent(hash.slice(9)));
   else if(hash==='pesanan' || hash.startsWith('pesanan/')){
@@ -396,6 +422,9 @@ app.addEventListener('change', e => {
 });
 
 document.addEventListener('click', async e => {
+  if(e.target.closest('[data-open-register]')){ openModal('Daftar akun Uply Digital',registerForm()); return; }
+  if(e.target.closest('[data-scroll-products]')){ if((location.hash||'#katalog')!=='#katalog'){location.hash='#katalog';setTimeout(()=>document.getElementById('produk')?.scrollIntoView({behavior:'smooth'}),120);}else document.getElementById('produk')?.scrollIntoView({behavior:'smooth'}); return; }
+  if(e.target.closest('[data-focus-products]')){ document.getElementById('produk')?.scrollIntoView({behavior:'smooth'}); document.getElementById('search')?.focus(); return; }
   const product = e.target.closest('[data-view-product]'); if(product){ productModal(product.dataset.viewProduct); return; }
   const chip = e.target.closest('[data-filter]'); if(chip){ state.filter=chip.dataset.filter; app.innerHTML=catalogPage(); document.getElementById('produk')?.scrollIntoView(); return; }
   if(e.target.closest('[data-open-login]')){ openModal('Masuk pelanggan',loginForm(false)); return; }
