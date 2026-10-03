@@ -1,21 +1,16 @@
-UPLY DIGITAL V12 — UPDATE
+UPLY DIGITAL V13 — UPDATE
 
-1. Backup repository GitHub lama jika perlu.
-2. Replace seluruh file repository dengan isi folder V12 ini.
-3. Pastikan file berada langsung di root: index.html, app.js, styles.css, package.json, vercel.json, api/, lib/, assets/.
-4. Commit ke branch main.
-5. Tunggu Vercel Production Deployment status Ready.
-6. Environment Variables lama tetap digunakan; tidak perlu database baru.
-7. Buka website lalu Ctrl+Shift+R / Incognito.
+1. Replace seluruh isi repository GitHub dengan isi folder V13.
+2. Commit ke branch main dan tunggu Vercel Production deployment selesai.
+3. Tambahkan Environment Variable baru di Vercel:
+   CREDENTIAL_ENCRYPTION_KEY = secret acak minimal 32 karakter (Type: Secret, Production + Preview).
+4. Environment lama (DATABASE_URL, SESSION_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD, Midtrans) tetap dipakai.
+5. Buka /api/health lalu tes login, produk, checkout, Top Up, pembayaran, admin.
 
-TEST WAJIB:
-- tema System/Light/Dark
-- daftar gratis saat belum login
-- daftar gratis saat sudah login -> Dashboard
-- detail produk -> keranjang -> checkout
-- order langsung -> checkout
-- catatan untuk admin masuk ke order
-- pembayaran manual atau Midtrans
-- invoice setelah pembayaran
-- dashboard + status member
-- tampilan mobile dan desktop
+TOP UP MANUAL VIA LOGIN
+- Produk kategori Top Up dipaksa menjadi fulfillment manual.
+- Pelanggan mengisi email + password akun tujuan di checkout.
+- Jangan pernah meminta OTP, recovery code, PIN, atau kode 2FA.
+- Data login dienkripsi di database dan dihapus otomatis saat order Completed/Cancelled.
+- Admin membuka data hanya dari order terkait.
+- Jika penyedia layanan punya OAuth/API resmi, itu lebih disarankan daripada meminta password.
