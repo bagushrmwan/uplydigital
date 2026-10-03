@@ -14,7 +14,7 @@ async function fulfill(orderId){
     if(items.length<Number(o.quantity)){await client.query(`UPDATE orders SET note='Pembayaran berhasil, tetapi inventory otomatis tidak mencukupi. Admin perlu menambahkan stok.',updated_at=NOW() WHERE id=$1`,[orderId]);await client.query('COMMIT');return null;}
     const ids=items.map(x=>x.id); const delivery=items.map(x=>x.item_value).join('\n');
     await client.query(`UPDATE inventory SET status='delivered',order_id=$2,updated_at=NOW() WHERE id = ANY($1::text[])`,[ids,orderId]);
-    done=(await client.query(`UPDATE orders SET status='completed',delivery=$2,inventory_item_id=$3,updated_at=NOW() WHERE id=$1 RETURNING *`,[orderId,delivery,ids.join(',')])).rows[0]; await client.query('COMMIT');
+    done=(await client.query(`UPDATE orders SET status='completed',delivery=$2,inventory_item_id=$3,completed_at=COALESCE(completed_at,NOW()),updated_at=NOW() WHERE id=$1 RETURNING *`,[orderId,delivery,ids.join(',')])).rows[0]; await client.query('COMMIT');
   }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
   if(done){await audit('midtrans','inventory_auto_delivered',done.id,{quantity:Number(done.quantity)});await sendEmail(done.email,`Pesanan ${done.id} selesai`,`<h2>Pesanan Uply Digital selesai</h2><p>${escapeHtml(done.product_name)}</p><pre style="white-space:pre-wrap">${escapeHtml(done.delivery)}</pre>`);} return done;
 }
@@ -30,7 +30,7 @@ export default async function handler(req,res){
     const {rows}=await q('SELECT * FROM orders WHERE id=$1 LIMIT 1',[orderId]); const order=rows[0]; if(!order) return res.status(200).end(JSON.stringify({ok:true,ignored:'unknown order'}));
     const status=String(body.transaction_status||''); const fraud=String(body.fraud_status||'').toLowerCase(); const success=(status==='settlement'||status==='capture')&&(!fraud||fraud==='accept')&&String(body.status_code)==='200';
     if(success){
-      await q(`UPDATE orders SET status='processing',gateway_status=$2,gateway_transaction_id=$3,stock_reserved=FALSE,updated_at=NOW() WHERE id=$1 AND status<>'completed'`,[orderId,status,String(body.transaction_id||'')]);
+      await q(`UPDATE orders SET status='processing',gateway_status=$2,gateway_transaction_id=$3,payment_submitted_at=COALESCE(payment_submitted_at,NOW()),payment_verified_at=COALESCE(payment_verified_at,NOW()),processing_at=COALESCE(processing_at,NOW()),stock_reserved=FALSE,updated_at=NOW() WHERE id=$1 AND status<>'completed'`,[orderId,status,String(body.transaction_id||'')]);
       await audit('midtrans','payment_verified',orderId,{status,paymentType:body.payment_type||''}); await fulfill(orderId);
     } else if(['expire','cancel','deny','failure'].includes(status)){
       if(order.status==='pending_payment' && order.stock_reserved){await q('UPDATE products SET stock=stock+$2,updated_at=NOW() WHERE id=$1 AND stock<>-1',[order.product_id,order.quantity]);}

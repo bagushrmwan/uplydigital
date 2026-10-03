@@ -14,7 +14,7 @@ function publicProduct(r,availableInventory){
   return {id:r.id,name:r.name,category:r.category,duration:r.duration,price:Number(r.price),description:r.description,benefits:Array.isArray(r.benefits)?r.benefits:[],terms:r.terms,stock:r.fulfillment_mode==='inventory'?availableInventory:Number(r.stock),active:r.active,badge:r.badge,icon:r.icon,fulfillmentMode:r.fulfillment_mode};
 }
 function publicOrder(o,admin=false){
-  return {id:o.id,userId:admin?o.user_id:undefined,email:o.email,name:o.name,phone:o.phone,channel:o.channel,productId:o.product_id,productName:o.product_name,duration:o.duration,quantity:Number(o.quantity),price:Number(o.price),total:Number(o.total),status:o.status,paymentMode:o.payment_mode,gatewayStatus:o.gateway_status,paymentUrl:o.payment_url,createdAt:o.created_at,expiresAt:o.expires_at,updatedAt:o.updated_at,hasProof:!!o.proof_name,proofName:o.proof_name,delivery:o.delivery,note:o.note,bank:o.bank_id?{id:o.bank_id,name:o.bank_name,number:o.bank_number,holder:o.bank_holder}:null};
+  return {id:o.id,userId:admin?o.user_id:undefined,email:o.email,name:o.name,phone:o.phone,channel:o.channel,productId:o.product_id,productName:o.product_name,duration:o.duration,quantity:Number(o.quantity),price:Number(o.price),total:Number(o.total),status:o.status,paymentMode:o.payment_mode,gatewayStatus:o.gateway_status,paymentUrl:o.payment_url,createdAt:o.created_at,expiresAt:o.expires_at,updatedAt:o.updated_at,paymentSubmittedAt:o.payment_submitted_at,paymentVerifiedAt:o.payment_verified_at,processingAt:o.processing_at,completedAt:o.completed_at,hasProof:!!o.proof_name,proofName:o.proof_name,delivery:o.delivery,note:o.note,bank:o.bank_id?{id:o.bank_id,name:o.bank_name,number:o.bank_number,holder:o.bank_holder}:null};
 }
 function originHeaders(req){
   const origin=String(req.headers.origin||''); const allowed=process.env.ALLOWED_ORIGIN||process.env.SITE_URL||'';
@@ -57,7 +57,7 @@ async function autoFulfill(orderId){
     if(items.length<Number(o.quantity)){ await client.query(`UPDATE orders SET note=$2,updated_at=NOW() WHERE id=$1`,[orderId,'Pembayaran diterima, tetapi inventory otomatis tidak mencukupi. Admin perlu menambahkan stok.']); await client.query('COMMIT'); return null; }
     const ids=items.map(x=>x.id); const delivery=items.map(x=>x.item_value).join('\n');
     await client.query(`UPDATE inventory SET status='delivered',order_id=$2,updated_at=NOW() WHERE id = ANY($1::text[])`,[ids,orderId]);
-    const {rows:done}=await client.query(`UPDATE orders SET status='completed',delivery=$2,inventory_item_id=$3,updated_at=NOW() WHERE id=$1 RETURNING *`,[orderId,delivery,ids.join(',')]);
+    const {rows:done}=await client.query(`UPDATE orders SET status='completed',delivery=$2,inventory_item_id=$3,completed_at=COALESCE(completed_at,NOW()),updated_at=NOW() WHERE id=$1 RETURNING *`,[orderId,delivery,ids.join(',')]);
     await client.query('COMMIT'); completed=done[0];
   }catch(e){ await client.query('ROLLBACK'); throw e; } finally { client.release(); }
   if(completed){
@@ -153,7 +153,7 @@ export default async function handler(req,res){
       const u=await requireAuth(req); const orderId=text(p.orderId,80); const mime=text(p.mime,60); const name=text(p.fileName,160); const base64=String(p.base64||'');
       if(!['image/jpeg','image/png','application/pdf'].includes(mime)) throw safeError('Bukti harus JPG, PNG, atau PDF.'); if(base64.length>1500000) throw safeError('Ukuran bukti maksimal sekitar 1 MB.');
       const {rows}=await q('SELECT * FROM orders WHERE id=$1 AND user_id=$2 LIMIT 1',[orderId,u.id]); const o=rows[0]; if(!o||o.payment_mode!=='manual'||!['pending_payment','review'].includes(o.status)) throw safeError('Pesanan tidak dapat menerima bukti pembayaran.');
-      await q(`UPDATE orders SET proof_name=$2,proof_mime=$3,proof_data=$4,status='review',updated_at=NOW() WHERE id=$1`,[orderId,name,mime,base64]); await audit(u.email,'proof_uploaded',orderId,{}); data=true;
+      await q(`UPDATE orders SET proof_name=$2,proof_mime=$3,proof_data=$4,status='review',payment_submitted_at=COALESCE(payment_submitted_at,NOW()),updated_at=NOW() WHERE id=$1`,[orderId,name,mime,base64]); await audit(u.email,'proof_uploaded',orderId,{}); data=true;
     }
     else if(action==='cancelOrder'){
       const u=await requireAuth(req); const orderId=text(p.orderId,80); const {rows}=await q('SELECT * FROM orders WHERE id=$1 AND user_id=$2 LIMIT 1',[orderId,u.id]); const o=rows[0]; if(!o||o.status!=='pending_payment') throw safeError('Pesanan ini tidak dapat dibatalkan sendiri.');
@@ -222,7 +222,12 @@ export default async function handler(req,res){
       if(['processing','completed'].includes(status) && ['pending_payment','review'].includes(old.status) && !bool(p.confirmPayment)) throw safeError('Centang konfirmasi bahwa pembayaran sudah diterima.');
       if(status==='completed' && !delivery && old.delivery) delivery=old.delivery; if(status==='completed'&&!delivery) throw safeError('Isi detail produk sebelum menyelesaikan pesanan manual.');
       if(status==='cancelled' && old.stock_reserved){await q('UPDATE products SET stock=stock+$2,updated_at=NOW() WHERE id=$1 AND stock<>-1',[old.product_id,old.quantity]);}
-      await q(`UPDATE orders SET status=$2,delivery=$3,note=$4,stock_reserved=CASE WHEN $2 IN ('processing','completed','cancelled') THEN FALSE ELSE stock_reserved END,updated_at=NOW() WHERE id=$1`,[orderId,status,delivery,note]); await audit(a.email,'order_status_updated',orderId,{from:old.status,to:status});
+      await q(`UPDATE orders SET status=$2,delivery=$3,note=$4,
+        payment_submitted_at=CASE WHEN $2 IN ('processing','completed') AND payment_submitted_at IS NULL THEN NOW() ELSE payment_submitted_at END,
+        payment_verified_at=CASE WHEN $2 IN ('processing','completed') AND payment_verified_at IS NULL THEN NOW() ELSE payment_verified_at END,
+        processing_at=CASE WHEN $2='processing' AND processing_at IS NULL THEN NOW() WHEN $2='completed' AND processing_at IS NULL THEN NOW() ELSE processing_at END,
+        completed_at=CASE WHEN $2='completed' AND completed_at IS NULL THEN NOW() ELSE completed_at END,
+        stock_reserved=CASE WHEN $2 IN ('processing','completed','cancelled') THEN FALSE ELSE stock_reserved END,updated_at=NOW() WHERE id=$1`,[orderId,status,delivery,note]); await audit(a.email,'order_status_updated',orderId,{from:old.status,to:status});
       if(status==='processing') await autoFulfill(orderId);
       if(status==='completed') await sendEmail(old.email,`Pesanan ${orderId} selesai`,`<h2>Pesanan selesai</h2><p>${escapeHtml(old.product_name)}</p><pre style="white-space:pre-wrap">${escapeHtml(delivery)}</pre>`);
       data=publicOrder((await q('SELECT * FROM orders WHERE id=$1',[orderId])).rows[0],true);
