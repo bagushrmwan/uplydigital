@@ -343,7 +343,7 @@ app.addEventListener('change', e => {
   }
 });
 
-app.addEventListener('click', async e => {
+document.addEventListener('click', async e => {
   const product = e.target.closest('[data-product]'); if(product){ productModal(product.dataset.product); return; }
   const chip = e.target.closest('[data-filter]'); if(chip){ state.filter=chip.dataset.filter; app.innerHTML=catalogPage(); document.getElementById('produk')?.scrollIntoView(); return; }
   if(e.target.closest('[data-open-login]')){ openModal('Masuk pelanggan',loginForm(false)); return; }
