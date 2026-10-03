@@ -1,0 +1,26 @@
+UPLY DIGITAL V8 — LANGKAH CEPAT
+
+1. Upload semua isi folder V8 ke project Vercel.
+2. Pastikan folder api/ ada sejajar dengan index.html.
+3. Tambahkan Environment Variables:
+   DATABASE_URL
+   ADMIN_EMAIL
+   ADMIN_PASSWORD
+   SESSION_SECRET
+   PAYMENT_MODE=manual
+   SITE_URL=https://domain-kamu.vercel.app
+4. Redeploy.
+5. Buka /api/health sampai backend dan database = connected.
+6. Buka /#admin lalu login.
+7. Panel Admin -> Inventory -> tambah stok satu per satu.
+8. Kalau manual sudah stabil, aktifkan Midtrans Sandbox.
+
+FITUR BARU V8:
+- Logo lama Uply Digital kembali dipakai.
+- Homepage lebih clean dan tidak menampilkan teks teknis.
+- Inventory add satu per satu + catatan + status.
+- Quick action admin.
+- Alert stok rendah.
+- Statistik inventory.
+- Search/filter pesanan dan pelanggan.
+- Activity log lebih mudah dibaca.

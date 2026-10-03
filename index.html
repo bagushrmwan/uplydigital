@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#081936">
+  <meta name="description" content="Uply Digital — toko kebutuhan digital yang simpel, cepat, dan mudah dipantau.">
+  <title>Uply Digital — Your Everyday Digital Store</title>
+  <link rel="icon" href="/assets/logo-uply-digital.png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap nav">
+      <a class="brand" href="#katalog" aria-label="Uply Digital">
+        <img src="/assets/logo-uply-digital.png" alt="Uply Digital">
+      </a>
+      <nav aria-label="Navigasi utama">
+        <a href="#katalog">Produk</a>
+        <a href="#pesanan">Pesanan</a>
+        <a href="#bantuan">Bantuan</a>
+      </nav>
+      <button id="accountBtn" class="btn ghost">Masuk</button>
+    </div>
+  </header>
+
+  <main id="app"><div class="loading">Menyiapkan Uply Digital…</div></main>
+
+  <footer>
+    <div class="wrap footer">
+      <div class="footer-brand">
+        <img src="/assets/logo-uply-digital.png" alt="Uply Digital">
+        <p>Upgrade Your Digital Life.</p>
+      </div>
+      <div>
+        <a href="#admin">Panel Admin</a>
+        <span>© <span id="year"></span> Uply Digital</span>
+      </div>
+    </div>
+  </footer>
+
+  <dialog id="modal"><div id="modalBody"></div></dialog>
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
