@@ -1,17 +1,17 @@
-# Hasil Pengujian V11
+# Hasil Pengujian Uply Digital V12
 
-Pengecekan lokal yang dilakukan:
-- JavaScript frontend syntax: PASS
-- API uply.js syntax: PASS
-- API health.js syntax: PASS
-- Midtrans webhook syntax: PASS
-- Library database/security/midtrans/email syntax: PASS
-- Header memiliki logo + teks `Uply Digital`: PASS
-- Mobile bottom navigation tersedia: PASS
-- Route `#dashboard`: PASS
-- Mobile breakpoints 760px / 420px tersedia: PASS
-- Desktop product grid 4 kolom: PASS
-- Checkout tetap menggunakan backend V10: PASS
-- Invoice V10 dipertahankan: PASS
+Pengujian lokal yang dilakukan:
 
-Catatan: transaksi live, Midtrans live, dan koneksi database production tetap harus dites di deployment Vercel milik pengguna karena kredensial production tidak tersedia di lingkungan pengujian lokal.
+- `node --check app.js` — LULUS
+- `node --check api/uply.js` — LULUS
+- `node --check api/payment-webhook.js` — LULUS
+- `node --check lib/db.js` — LULUS
+- Pemeriksaan feature marker Theme System/Light/Dark — LULUS
+- Pemeriksaan redirect Daftar Gratis -> Dashboard saat login — LULUS
+- Pemeriksaan dedicated Product Detail — LULUS
+- Pemeriksaan cart drawer dan checkout handoff — LULUS
+- Pemeriksaan checkout customer note -> API order note — LULUS
+- Pemeriksaan member status card — LULUS
+- Pemeriksaan responsive CSS desktop/mobile — LULUS
+
+Catatan: transaksi Midtrans, koneksi Neon/PostgreSQL, dan email nyata tetap perlu dites pada deployment Vercel milik pengguna karena memerlukan kredensial/Environment Variables akun pengguna.

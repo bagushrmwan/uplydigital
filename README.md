@@ -1,38 +1,19 @@
-# Uply Digital V11 — Responsive Desktop + Mobile
+# Uply Digital V12 — Responsive Storefront
 
-Versi V11 mengembangkan V10 menjadi UI adaptif dengan pengalaman desktop dan mobile yang sengaja dibedakan, tetapi tetap dalam **satu codebase** agar mudah dirawat dan otomatis menyesuaikan perangkat.
+Project Vercel Native untuk Uply Digital dengan frontend desktop/mobile, PostgreSQL, login pelanggan/admin, checkout, Midtrans/transfer manual, invoice, inventory, dan panel admin.
 
-## Desktop experience
-- Navigasi penuh dan brand Uply Digital.
-- Hero besar dengan featured products.
-- Grid produk 4/3/2 kolom mengikuti lebar layar.
-- Customer Dashboard dengan sidebar dan statistik.
-- Checkout dua kolom.
-- Admin dashboard untuk layar lebar.
+## Highlight V12
+- Theme System / Light / Dark
+- Dedicated product detail page
+- Cart drawer
+- Modern checkout page
+- Customer note on order
+- Customer dashboard + member tier
+- Popular categories
+- Expanded footer + quick support
+- Daftar Gratis redirects to Dashboard when already logged in
 
-## Mobile experience
-- Nama Uply Digital tetap terlihat di header.
-- Bottom navigation fixed.
-- Produk card horizontal satu kolom.
-- Dashboard pelanggan berbasis card.
-- Checkout single-column dengan input touch-friendly.
-- Admin navigation horizontal-scroll.
-- Invoice responsif.
+## Deploy
+Upload/commit semua file ke root repository GitHub yang terhubung ke Vercel. Branch production: `main`.
 
-## Backend
-Backend tetap Vercel Native + PostgreSQL seperti V10. Tidak ada Google Apps Script.
-
-Environment Variables lama tetap dipakai:
-- DATABASE_URL
-- ADMIN_EMAIL
-- ADMIN_PASSWORD
-- SESSION_SECRET
-- PAYMENT_MODE
-- SITE_URL
-- MIDTRANS_SERVER_KEY (jika Midtrans aktif)
-- MIDTRANS_IS_PRODUCTION
-- RESEND_API_KEY (opsional)
-- EMAIL_FROM (opsional)
-
-## Deployment
-Replace semua file repository GitHub dengan V11, commit ke `main`, dan tunggu Vercel membuat Production Deployment.
+Environment variables tetap sama dengan versi sebelumnya (`DATABASE_URL`, `SESSION_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `PAYMENT_MODE`, `SITE_URL`, dan Midtrans bila dipakai).

@@ -1,31 +1,21 @@
-UPLY DIGITAL V11 — DESKTOP + MOBILE
+UPLY DIGITAL V12 — UPDATE
 
-V11 bukan dua project terpisah. Satu project otomatis menyesuaikan tampilannya berdasarkan ukuran layar.
+1. Backup repository GitHub lama jika perlu.
+2. Replace seluruh file repository dengan isi folder V12 ini.
+3. Pastikan file berada langsung di root: index.html, app.js, styles.css, package.json, vercel.json, api/, lib/, assets/.
+4. Commit ke branch main.
+5. Tunggu Vercel Production Deployment status Ready.
+6. Environment Variables lama tetap digunakan; tidak perlu database baru.
+7. Buka website lalu Ctrl+Shift+R / Incognito.
 
-CARA UPDATE:
-1. Extract Uply-Digital-V11-Responsive-READY.zip.
-2. Replace seluruh file project GitHub lama dengan isi ZIP.
-3. Commit ke branch main.
-4. Tunggu Vercel Production Deployment selesai.
-5. Environment Variables dan database lama tetap digunakan.
-6. Buka website lalu Ctrl+Shift+R / Incognito.
-
-TEST DESKTOP:
-- Buka website di laptop/PC.
-- Hero harus dua kolom.
-- Produk maksimal 4 kolom.
-- Dashboard pelanggan memiliki sidebar.
-
-TEST MOBILE:
-- Buka website dari HP, atau Chrome DevTools > Toggle device toolbar.
-- Header tetap menampilkan logo + teks Uply Digital.
-- Muncul bottom navigation: Beranda / Produk / Dashboard / Pesanan.
-- Produk menjadi card satu kolom.
-- Checkout menjadi satu kolom.
-
-URL PENTING:
-/#katalog    Beranda + produk
-/#dashboard  Dashboard pelanggan
-/#pesanan    Riwayat pesanan
-/#admin      Panel admin
-/api/health  Cek backend/database
+TEST WAJIB:
+- tema System/Light/Dark
+- daftar gratis saat belum login
+- daftar gratis saat sudah login -> Dashboard
+- detail produk -> keranjang -> checkout
+- order langsung -> checkout
+- catatan untuk admin masuk ke order
+- pembayaran manual atau Midtrans
+- invoice setelah pembayaran
+- dashboard + status member
+- tampilan mobile dan desktop

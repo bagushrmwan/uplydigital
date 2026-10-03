@@ -7,6 +7,16 @@
   <meta name="description" content="Uply Digital — toko kebutuhan digital yang simpel, cepat, dan mudah dipantau.">
   <title>Uply Digital — Your Everyday Digital Store</title>
   <link rel="icon" href="/assets/logo-uply-digital.png">
+  <script>
+    (function(){
+      const saved = localStorage.getItem('uply_theme') || 'system';
+      const resolved = saved === 'system'
+        ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        : saved;
+      document.documentElement.dataset.theme = resolved;
+      document.documentElement.dataset.themeMode = saved;
+    })();
+  </script>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -23,11 +33,26 @@
         <a href="#pesanan">Pesanan</a>
         <a href="#bantuan">Bantuan</a>
       </nav>
-      <button id="accountBtn" class="btn ghost">Masuk</button>
+      <div class="nav-actions">
+        <button id="themeBtn" class="icon-btn" type="button" data-theme-open aria-label="Pilih tema" title="Tema tampilan">◐</button>
+        <button id="cartBtn" class="icon-btn cart-trigger" type="button" data-cart-open aria-label="Buka keranjang">🛒<span id="cartCount" class="cart-count" hidden>0</span></button>
+        <button id="accountBtn" class="btn ghost">Masuk</button>
+      </div>
     </div>
   </header>
 
   <main id="app"><div class="loading">Menyiapkan Uply Digital…</div></main>
+
+  <div id="cartBackdrop" class="drawer-backdrop" hidden data-cart-close></div>
+  <aside id="cartDrawer" class="cart-drawer" aria-label="Keranjang belanja" aria-hidden="true">
+    <div class="cart-drawer-head">
+      <div><span class="section-kicker">Keranjang</span><h2>Keranjang Belanja</h2></div>
+      <button class="x" type="button" data-cart-close aria-label="Tutup keranjang">✕</button>
+    </div>
+    <div id="cartDrawerBody" class="cart-drawer-body"></div>
+  </aside>
+
+  <button class="floating-support" type="button" data-support-open aria-label="Bantuan cepat">?</button>
 
   <nav class="mobile-bottom-nav" aria-label="Navigasi mobile">
     <a href="#katalog" data-mobile-nav="katalog"><span class="mobile-nav-icon">⌂</span><span>Beranda</span></a>
@@ -36,17 +61,36 @@
     <a href="#pesanan" data-mobile-nav="pesanan"><span class="mobile-nav-icon">≡</span><span>Pesanan</span></a>
   </nav>
 
-  <footer>
-    <div class="wrap footer">
-      <div class="footer-brand">
+  <footer class="site-footer">
+    <div class="wrap footer footer-v12">
+      <div class="footer-brand footer-col">
         <div class="footer-logo-row"><img src="/assets/logo-mark.png" alt=""><strong>Uply Digital</strong></div>
-        <p>Upgrade Your Digital Life.</p>
+        <p>Toko kebutuhan digital dengan proses yang simpel, status pesanan yang jelas, dan bantuan admin saat dibutuhkan.</p>
+        <div class="footer-badges"><span>✓ Proses jelas</span><span>✓ Pembayaran fleksibel</span><span>✓ Support admin</span></div>
       </div>
-      <div>
+      <div class="footer-col">
+        <h4>Produk</h4>
+        <button type="button" data-scroll-products>Streaming</button>
+        <button type="button" data-scroll-products>AI & Produktivitas</button>
+        <button type="button" data-scroll-products>Top Up</button>
+        <button type="button" data-scroll-products>Perangkat</button>
+      </div>
+      <div class="footer-col">
+        <h4>Informasi</h4>
+        <a href="#bantuan">Cara Pembelian</a>
+        <a href="#bantuan">Metode Pembayaran</a>
+        <a href="#pesanan">Cek Status Pesanan</a>
+        <a href="#dashboard">Dashboard Pelanggan</a>
+      </div>
+      <div class="footer-col">
+        <h4>Akun</h4>
+        <button type="button" data-open-login>Masuk</button>
+        <button type="button" data-open-register>Daftar Gratis</button>
         <a href="#admin">Panel Admin</a>
-        <span>© <span id="year"></span> Uply Digital</span>
+        <button type="button" data-support-open>Hubungi Support</button>
       </div>
     </div>
+    <div class="footer-bottom"><div class="wrap"><span>© <span id="year"></span> Uply Digital. All rights reserved.</span><span>Upgrade Your Digital Life.</span></div></div>
   </footer>
 
   <dialog id="modal"><div id="modalBody"></div></dialog>
