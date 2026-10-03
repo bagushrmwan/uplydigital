@@ -204,3 +204,6 @@ html[data-theme="dark"] .credential-notice{background:#2d2411;border-color:#5c47
 @media(max-width:760px){.card .thumbnail-cover,.card-thumb{height:165px;min-height:165px}.product-photo-stage{min-height:340px}.promo-strip>.wrap{align-items:flex-start;flex-wrap:wrap}.promo-strip button{width:100%}.funnel-grid{grid-template-columns:1fr}.order-thumb{width:52px;height:52px}.order-thumb-img{width:52px;height:52px}}
 
 .cart-item-cover.thumb-cart{padding:0;overflow:hidden}.cart-thumb-img{width:100%;height:100%;object-fit:cover}.invoice-product-cell{display:flex;align-items:center;gap:10px}.invoice-product-thumb{width:48px;height:48px;border-radius:10px;object-fit:cover;border:1px solid var(--line)}
+
+/* V14 payment + stock reliability */
+.table-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.button-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.button-row .btn{margin:0}.payment-provider+.notice{margin-top:12px}

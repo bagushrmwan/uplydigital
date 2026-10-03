@@ -1,16 +1,51 @@
-UPLY DIGITAL V13 — UPDATE
+UPLY DIGITAL V14 — PAYMENT + STOCK FIX
 
-1. Replace seluruh isi repository GitHub dengan isi folder V13.
-2. Commit ke branch main dan tunggu Vercel Production deployment selesai.
-3. Tambahkan Environment Variable baru di Vercel:
-   CREDENTIAL_ENCRYPTION_KEY = secret acak minimal 32 karakter (Type: Secret, Production + Preview).
-4. Environment lama (DATABASE_URL, SESSION_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD, Midtrans) tetap dipakai.
-5. Buka /api/health lalu tes login, produk, checkout, Top Up, pembayaran, admin.
+1. Replace seluruh isi repository GitHub dengan isi folder V14.
+2. Commit ke branch main dan tunggu Vercel Production Deployment selesai.
+3. Environment Variables lama tetap dipakai.
 
-TOP UP MANUAL VIA LOGIN
-- Produk kategori Top Up dipaksa menjadi fulfillment manual.
-- Pelanggan mengisi email + password akun tujuan di checkout.
-- Jangan pernah meminta OTP, recovery code, PIN, atau kode 2FA.
-- Data login dienkripsi di database dan dihapus otomatis saat order Completed/Cancelled.
-- Admin membuka data hanya dari order terkait.
-- Jika penyedia layanan punya OAuth/API resmi, itu lebih disarankan daripada meminta password.
+WAJIB CEK UNTUK MIDTRANS:
+- PAYMENT_MODE = midtrans
+- MIDTRANS_SERVER_KEY = Server Key yang sesuai Sandbox/Production
+- MIDTRANS_IS_PRODUCTION = false untuk Sandbox, true untuk Production
+- SITE_URL = URL website Production tanpa slash di akhir
+
+Opsional:
+- MIDTRANS_NOTIFICATION_URL = https://domain-kamu.vercel.app/api/payment-webhook
+  Jika tidak diisi, V14 otomatis membuat URL dari SITE_URL.
+
+4. Buka:
+   https://DOMAIN-KAMU/api/health
+
+Target ketika Midtrans aktif:
+- ok: true
+- database: connected
+- payment.mode: midtrans
+- payment.ready: true
+- payment.serverKey: configured
+- payment.notificationUrl: https://DOMAIN-KAMU/api/payment-webhook
+
+5. TEST PEMBAYARAN SANDBOX:
+- login pelanggan
+- checkout produk
+- klik Lanjut ke Pembayaran
+- selesaikan transaksi Sandbox
+- setelah kembali ke website, status akan disinkron otomatis
+- jika belum berubah, klik "Cek status pembayaran"
+
+6. TAMBAH STOK MANUAL:
+Panel Admin → Produk → pilih tombol "Tambah stok" / "Atur stok"
+- Tambah stok = menambahkan jumlah
+- Kurangi stok = mengurangi jumlah
+- Set stok langsung = menentukan stok final
+- nilai -1 = Tanpa batas
+
+7. INVENTORY OTOMATIS:
+Produk yang mode pengirimannya "Inventory otomatis" tidak memakai tombol stok manual.
+Masuk Panel Admin → Inventory → Tambah 1 Item.
+Setiap item available dihitung sebagai 1 stok.
+
+JANGAN:
+- jangan menaruh Server Key Midtrans di frontend/GitHub
+- jangan mencampur Server Key Sandbox dengan MIDTRANS_IS_PRODUCTION=true
+- jangan memakai stok manual untuk produk Inventory Otomatis

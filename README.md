@@ -1,22 +1,42 @@
-# Uply Digital V13 — Vercel Native
+# Uply Digital V14 — Vercel Native
 
-Versi V13 fokus pada katalog visual, proses Top Up manual yang lebih aman, dan fitur pertumbuhan toko.
+V14 adalah perbaikan reliability untuk pembayaran otomatis Midtrans dan stok produk.
 
 ## Environment Variables
-Wajib: `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `SITE_URL`.
-Untuk Top Up via login tambahkan `CREDENTIAL_ENCRYPTION_KEY` minimal 32 karakter sebagai **Secret**.
-Midtrans tetap menggunakan `PAYMENT_MODE`, `MIDTRANS_SERVER_KEY`, `MIDTRANS_IS_PRODUCTION`.
+Wajib:
+- `DATABASE_URL`
+- `SESSION_SECRET`
+- `ADMIN_EMAIL`
+- `ADMIN_PASSWORD`
+- `SITE_URL`
 
-## Top Up Manual
-Kategori `Top Up` selalu diproses manual. Produk tersebut dapat meminta email + password akun tujuan pada checkout. Credential terenkripsi AES-256-GCM, tidak dikirim ke pelanggan lain, tidak dicatat plaintext dalam audit, dan dihapus ketika order selesai atau dibatalkan. Jangan meminta OTP/recovery code/2FA. Utamakan OAuth/API resmi bila penyedia mendukungnya.
+Top Up via login:
+- `CREDENTIAL_ENCRYPTION_KEY` minimal 32 karakter (Secret)
 
-## Thumbnail
-Setiap produk memiliki `thumbnail_url`. Admin dapat mengganti path internal seperti `/assets/products/netflix.svg` atau URL HTTPS sendiri.
+Midtrans:
+- `PAYMENT_MODE=midtrans`
+- `MIDTRANS_SERVER_KEY=<Server Key>`
+- `MIDTRANS_IS_PRODUCTION=false` untuk Sandbox
+- `MIDTRANS_NOTIFICATION_URL` opsional; jika kosong, sistem memakai `${SITE_URL}/api/payment-webhook`
 
-## Growth features
-- Featured products
-- Best seller badge dari completed orders
-- Promo banner homepage
-- Low-stock alert
-- Order funnel admin
-- Dashboard pelanggan, invoice, theme terang/gelap/system, responsive desktop/mobile
+## Midtrans V14
+Backend membuat Snap transaction menggunakan Server Key. V14 juga mengirim notification override per transaksi ke webhook website, menyediakan sinkronisasi Get Status API, dan memakai gateway order ID per attempt supaya retry lebih aman.
+
+Gunakan `/api/health` untuk memastikan konfigurasi payment siap sebelum test checkout.
+
+## Stok V14
+Ada dua model stok:
+
+### Manual stock
+Cocok untuk produk yang diproses admin, termasuk Top Up.
+Panel Admin → Produk → **Tambah stok / Atur stok**.
+
+### Inventory Otomatis
+Cocok untuk kode/link/lisensi yang dapat diberikan otomatis.
+Panel Admin → Inventory → **Tambah 1 Item**.
+Jumlah inventory berstatus `available` menjadi stok produk.
+
+Top Up tetap dipaksa ke mode manual sesuai desain V13.
+
+## Database migration
+Migration bersifat non-destruktif (`ADD COLUMN IF NOT EXISTS`). V14 menambahkan field retry/payment event tanpa reset data lama.
