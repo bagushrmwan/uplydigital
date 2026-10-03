@@ -116,6 +116,7 @@ export default async function handler(req,res){
     else if(action==='createOrder'){
       const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
       const settings=await getSettings(); if(!bool(settings.storeOpen)) throw safeError('Toko sedang menutup pesanan baru.');
+      if(p.agree!==true) throw safeError('Setujui ketentuan produk sebelum membuat pesanan.');
       const requestId=text(p.requestId,80); if(!/^[a-zA-Z0-9._-]{12,80}$/.test(requestId)) throw safeError('Muat ulang halaman lalu coba lagi.');
       const old=await q('SELECT * FROM orders WHERE request_id=$1 AND user_id=$2 LIMIT 1',[requestId,u.id]); if(old.rowCount){data={order:publicOrder(old.rows[0]),duplicate:true};}
       else {
@@ -126,7 +127,7 @@ export default async function handler(req,res){
         const name=text(p.name||u.name,80); if(name.length<2) throw safeError('Nama penerima wajib diisi.'); const channel=p.channel==='whatsapp'?'whatsapp':'email'; const ph=phone(p.phone,channel==='whatsapp');
         const mode=midtransEnabled()?'midtrans':'manual'; let bank={id:'',name:'',number:'',holder:''};
         if(mode==='manual'){
-          const {rows:bs}=await q('SELECT * FROM banks WHERE id=$1 AND active=TRUE LIMIT 1',[text(p.bankId,100)]); if(!bs[0]) throw safeError('Pilih rekening pembayaran.'); bank=bs[0];
+          const {rows:bs}=await q('SELECT * FROM banks WHERE id=$1 AND active=TRUE LIMIT 1',[text(p.bankId,100)]); if(!bs[0]) throw safeError('Rekening pembayaran tidak tersedia. Minta admin mengaktifkan minimal satu rekening.'); bank=bs[0];
         }
         const orderId=`UPL-${new Date().toISOString().slice(2,10).replace(/-/g,'')}-${Math.random().toString(36).slice(2,10).toUpperCase()}`;
         const total=Number(prod.price)*qty; const hours=Math.max(1,Math.min(72,Number(settings.paymentHours)||24));
