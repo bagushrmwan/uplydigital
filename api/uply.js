@@ -130,9 +130,9 @@ export default async function handler(req,res){
           const {rows:bs}=await q('SELECT * FROM banks WHERE id=$1 AND active=TRUE LIMIT 1',[text(p.bankId,100)]); if(!bs[0]) throw safeError('Rekening pembayaran tidak tersedia. Minta admin mengaktifkan minimal satu rekening.'); bank=bs[0];
         }
         const orderId=`UPL-${new Date().toISOString().slice(2,10).replace(/-/g,'')}-${Math.random().toString(36).slice(2,10).toUpperCase()}`;
-        const total=Number(prod.price)*qty; const hours=Math.max(1,Math.min(72,Number(settings.paymentHours)||24));
-        const {rows:ors}=await q(`INSERT INTO orders(id,user_id,email,name,phone,channel,product_id,product_name,duration,quantity,price,total,bank_id,bank_name,bank_number,bank_holder,status,payment_mode,expires_at,request_id,stock_reserved)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'pending_payment',$17,NOW()+($18 || ' hours')::interval,$19,$20) RETURNING *`,[orderId,u.id,u.email,name,ph,channel,prod.id,prod.name,prod.duration,qty,Number(prod.price),total,bank.id||'',bank.name||'',bank.number||'',bank.holder||'',mode,String(hours),requestId,(Number(prod.stock)!==-1&&prod.fulfillment_mode!=='inventory')]);
+        const total=Number(prod.price)*qty; const hours=Math.max(1,Math.min(72,Number(settings.paymentHours)||24)); const customerNote=text(p.customerNote,800);
+        const {rows:ors}=await q(`INSERT INTO orders(id,user_id,email,name,phone,channel,product_id,product_name,duration,quantity,price,total,bank_id,bank_name,bank_number,bank_holder,note,status,payment_mode,expires_at,request_id,stock_reserved)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'pending_payment',$18,NOW()+($19 || ' hours')::interval,$20,$21) RETURNING *`,[orderId,u.id,u.email,name,ph,channel,prod.id,prod.name,prod.duration,qty,Number(prod.price),total,bank.id||'',bank.name||'',bank.number||'',bank.holder||'',customerNote,mode,String(hours),requestId,(Number(prod.stock)!==-1&&prod.fulfillment_mode!=='inventory')]);
         let order=ors[0]; let paymentUrl='';
         if(Number(prod.stock)!==-1 && prod.fulfillment_mode!=='inventory') await q('UPDATE products SET stock=GREATEST(stock-$2,0),updated_at=NOW() WHERE id=$1',[prod.id,qty]);
         if(mode==='midtrans'){
