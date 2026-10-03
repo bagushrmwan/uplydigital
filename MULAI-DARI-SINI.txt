@@ -1,11 +1,21 @@
-UPLY DIGITAL V9 — CHECKOUT FIX + BRAND TEXT
+UPLY DIGITAL V10 — UPDATE TERBARU
 
-1. Upload seluruh isi folder/ZIP ini ke repository GitHub branch main.
-2. Pastikan Vercel terhubung ke repository dan branch main.
-3. Jangan hapus Environment Variables lama: DATABASE_URL, ADMIN_EMAIL, ADMIN_PASSWORD, SESSION_SECRET, PAYMENT_MODE, SITE_URL, dan Midtrans jika dipakai.
-4. Tunggu deployment Production selesai.
-5. Buka website dengan Ctrl+Shift+R / Incognito.
-6. Test: daftar/login pelanggan -> Detail produk -> Lanjut checkout -> centang ketentuan -> Buat Pesanan.
-7. Nama Uply Digital sekarang tampil sebagai teks di samping logo.
+1. Replace seluruh file repository GitHub dengan isi folder/ZIP V10.
+2. Commit ke branch main.
+3. Tunggu deployment Vercel sampai Ready/Production.
+4. Environment Variables lama tetap dipakai; tidak perlu membuat database baru.
+5. Buka website lalu Ctrl + Shift + R.
 
-Jika checkout manual tidak bisa dibuat, cek Panel Admin -> Pengaturan -> pastikan toko menerima pesanan dan minimal satu rekening aktif.
+TEST WAJIB:
+- Login sebagai pelanggan.
+- Detail produk -> Lanjut checkout.
+- Klik/isi Nama, WhatsApp, channel, bank, qty: modal detail produk TIDAK boleh muncul lagi.
+- Buat pesanan.
+- Transfer manual -> upload bukti: invoice sementara harus muncul.
+- Admin verifikasi -> Processing: invoice berubah menjadi pembayaran terverifikasi/diproses.
+- Admin selesai / auto inventory: invoice final menampilkan status Selesai.
+- Tombol Cetak / Simpan PDF membuka dialog print browser.
+
+CATATAN:
+- Untuk Midtrans, invoice muncul setelah webhook pembayaran berhasil memperbarui order.
+- Database V10 menambah kolom timestamp invoice otomatis tanpa menghapus data lama.

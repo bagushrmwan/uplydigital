@@ -1,15 +1,29 @@
-# Hasil Pengujian Uply Digital V9
+# Hasil Pengujian Uply Digital V10
 
-Pengujian statis yang dilakukan sebelum paket dibuat:
+## Lulus — syntax
+- `app.js`
+- `api/uply.js`
+- `api/health.js`
+- `api/payment-webhook.js`
+- seluruh file `lib/*.js`
 
-- `node --check app.js` — LULUS
-- `node --check api/uply.js` — LULUS
-- `node --check api/health.js` — LULUS
-- `node --check api/payment-webhook.js` — LULUS
-- `node --check lib/db.js` — LULUS
-- `node --check lib/security.js` — LULUS
-- `node --check lib/midtrans.js` — LULUS
-- Struktur ZIP root berisi `index.html`, `app.js`, `styles.css`, `package.json`, `vercel.json`, `api/`, `lib/`, dan `assets/`.
-- Alur checkout sekarang memvalidasi login pelanggan, status toko, stok, rekening manual, persetujuan S&K, channel WhatsApp, quantity, dan pesan error API.
+Semua diperiksa menggunakan `node --check`.
 
-Pengujian transaksi nyata PostgreSQL/Midtrans tetap perlu dilakukan setelah deployment karena membutuhkan Environment Variables dan akun gateway milik pengguna.
+## Lulus — checkout regression
+- Tombol detail menggunakan `data-view-product`.
+- Form checkout menggunakan `data-product-id`.
+- Tidak ada lagi click selector umum `[data-product]`.
+- Event checkout memakai listener document sehingga tombol di modal tetap bekerja.
+- Input Nama/WhatsApp/Bank/Quantity tidak lagi memenuhi selector tombol detail produk.
+
+## Lulus — invoice
+- Invoice UI tersedia setelah pembayaran dikirim/status review/processing/completed.
+- Tombol Cetak / Simpan PDF tersedia.
+- API mengirim timestamp payment submitted, verified, processing, completed.
+- Upload bukti manual mencatat `payment_submitted_at`.
+- Verifikasi admin mencatat pembayaran/proses/selesai.
+- Midtrans webhook mencatat pembayaran terverifikasi dan processing.
+- Auto inventory mencatat completed timestamp.
+
+## Catatan pengujian nyata
+Koneksi produksi ke akun Vercel, Neon/PostgreSQL, Midtrans, email, dan browser pelanggan tetap harus diuji pada deployment milik pengguna karena kredensial production tidak tersedia di environment pengembangan ini.

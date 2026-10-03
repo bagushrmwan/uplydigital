@@ -124,7 +124,7 @@ function productCards(){
       <h3>${esc(p.name)}</h3>
       <p>${esc(p.description)}</p>
       <div class="stock-line">${p.stock===0?'<span class="stock-out">Stok habis</span>':p.stock>0&&p.stock<=3?`<span class="stock-low">Sisa ${p.stock}</span>`:'<span>Siap dipesan</span>'}</div>
-      <div class="card-foot"><div class="price">${money(p.price)}<small> / ${esc(p.duration)}</small></div><button class="btn small" data-product="${esc(p.id)}" ${p.stock===0?'disabled':''}>Detail</button></div>
+      <div class="card-foot"><div class="price">${money(p.price)}<small> / ${esc(p.duration)}</small></div><button class="btn small" data-view-product="${esc(p.id)}" ${p.stock===0?'disabled':''}>Detail</button></div>
     </div>
   </article>`).join('');
 }
@@ -196,13 +196,63 @@ function checkoutPage(id){
       : `<div class="notice warn"><strong>Checkout belum siap.</strong><br>Belum ada rekening pembayaran aktif. Hubungi admin atau aktifkan rekening dari Panel Admin.</div>`)
     : `<div class="notice ok"><strong>Pembayaran otomatis aktif.</strong><br>Setelah pesanan dibuat kamu akan diarahkan ke halaman pembayaran Midtrans.</div>`;
   return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Checkout</div><h1>${esc(p.name)}</h1><p>${money(p.price)} · ${esc(p.duration)}</p></div>
-  <form id="checkoutForm" data-product="${esc(p.id)}" class="two"><div class="stack"><div class="panel"><h2>Kontak penerima</h2><div class="row"><label class="field">Nama<input name="name" required minlength="2" maxlength="80" value="${esc(state.user.name)}"></label><label class="field">Email<input value="${esc(state.user.email)}" readonly></label></div><label class="field">Nomor WhatsApp <small>Wajib jika detail dikirim lewat WhatsApp.</small><input name="phone" type="tel" maxlength="24" placeholder="081234567890"></label><label class="field">Kirim detail melalui<select name="channel" id="checkoutChannel"><option value="email">Email</option><option value="whatsapp">WhatsApp</option></select></label></div>${paymentBox}</div>
+  <form id="checkoutForm" data-product-id="${esc(p.id)}" class="two"><div class="stack"><div class="panel"><h2>Kontak penerima</h2><div class="row"><label class="field">Nama<input name="name" required minlength="2" maxlength="80" value="${esc(state.user.name)}"></label><label class="field">Email<input value="${esc(state.user.email)}" readonly></label></div><label class="field">Nomor WhatsApp <small>Wajib jika detail dikirim lewat WhatsApp.</small><input name="phone" type="tel" maxlength="24" placeholder="081234567890"></label><label class="field">Kirim detail melalui<select name="channel" id="checkoutChannel"><option value="email">Email</option><option value="whatsapp">WhatsApp</option></select></label></div>${paymentBox}</div>
   <aside class="panel order-summary"><h2>Ringkasan</h2><div class="summary-product"><div>${icon(p)}</div><div><strong>${esc(p.name)}</strong><span>${esc(p.duration)}</span></div></div><label class="field">Jumlah<select name="quantity" id="checkoutQuantity">${qtyOptions}</select></label><div class="summary-row"><span>Harga satuan</span><strong>${money(p.price)}</strong></div><div class="summary-row total"><span>Total pembayaran</span><strong id="checkoutTotal">${money(p.price)}</strong></div><label class="check"><input type="checkbox" name="agree" required> Saya sudah membaca dan menyetujui ketentuan produk.</label><div id="checkoutError" class="form-inline-error" hidden></div><button class="btn full" type="submit" ${manual&&!banksAvailable?'disabled':''}>${manual?'Buat Pesanan':'Bayar Sekarang'}</button><p class="tiny center">Pesanan baru dibuat setelah tombol ini ditekan.</p></aside></form></div></section>`;
 }
 function ordersPage(){
   if(!state.user || state.user.role!=='user') return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Pesanan</div><h1>Pantau pesananmu</h1><p>Masuk untuk melihat riwayat pesanan.</p></div><div class="panel" style="max-width:520px"><button class="btn" data-open-login>Masuk pelanggan</button></div></div></section>`;
   if(!state.orders.length) return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Pesanan</div><h1>Belum ada pesanan</h1><p>Produk digital pertamamu menunggu.</p></div><a class="btn" href="#katalog">Lihat produk</a></div></section>`;
   return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Pesanan</div><h1>Pesanan saya</h1><p>${state.orders.length} pesanan tersimpan di akunmu.</p></div><div class="orders">${state.orders.map(o=>`<article class="order"><div><span class="tiny">${esc(o.id)} · ${dt(o.createdAt)}</span><h3>${esc(o.productName)}</h3><span class="tiny">${esc(o.duration)} · ${o.quantity} produk</span></div><div><strong>${money(o.total)}</strong><br>${status(o.status)}</div><a class="btn light small" href="#pesanan/${encodeURIComponent(o.id)}">Lihat detail</a></article>`).join('')}</div></div></section>`;
+}
+
+function invoicePaymentState(o){
+  if(o.status==='cancelled') return {label:'Dibatalkan', cls:'cancelled'};
+  if(o.paymentVerifiedAt || ['processing','completed'].includes(o.status)) return {label:'Pembayaran terverifikasi', cls:'completed'};
+  if(o.paymentSubmittedAt || o.hasProof || o.status==='review') return {label:'Pembayaran dikirim', cls:'review'};
+  return {label:'Menunggu pembayaran', cls:'pending_payment'};
+}
+
+function invoiceNumber(o){ return 'INV-' + String(o.id||'').replace(/^UPL-/,''); }
+function invoiceChip(ps){ return `<span class="status ${esc(ps.cls)}">${esc(ps.label)}</span>`; }
+function invoiceDate(v){ return v ? dt(v) : '—'; }
+function paymentMethod(o){
+  if(o.paymentMode==='midtrans') return 'Midtrans';
+  if(o.bank?.name) return `Transfer ${o.bank.name}`;
+  return 'Transfer bank';
+}
+function invoiceVisible(o){
+  return !!(o.paymentSubmittedAt || o.paymentVerifiedAt || o.hasProof || ['review','processing','completed'].includes(o.status));
+}
+function invoiceHTML(o){
+  const ps=invoicePaymentState(o);
+  const processLabel=o.status==='completed'?'Pesanan selesai':o.status==='processing'?'Sedang diproses':o.status==='review'?'Menunggu verifikasi admin':statusLabel[o.status]||o.status;
+  return `<div class="panel invoice-card" id="invoice-${esc(o.id)}">
+    <div class="invoice-head"><div><span class="invoice-kicker">Invoice Uply Digital</span><h2>${esc(invoiceNumber(o))}</h2><p>${esc(o.id)}</p></div><div class="invoice-actions">${invoiceChip(ps)}<button class="btn light small" data-print-invoice="${esc(o.id)}">Cetak / Simpan PDF</button></div></div>
+    <div class="invoice-meta">
+      <div><span>Tanggal pesanan</span><strong>${esc(invoiceDate(o.createdAt))}</strong></div>
+      <div><span>Metode pembayaran</span><strong>${esc(paymentMethod(o))}</strong></div>
+      <div><span>Status pembayaran</span><strong>${esc(ps.label)}</strong></div>
+      <div><span>Status pesanan</span><strong>${esc(processLabel)}</strong></div>
+    </div>
+    <div class="invoice-timeline">
+      <div class="${o.paymentSubmittedAt||o.hasProof||o.paymentVerifiedAt?'done':''}"><b>1</b><span><strong>Pembayaran dikirim</strong><small>${esc(invoiceDate(o.paymentSubmittedAt))}</small></span></div>
+      <div class="${o.paymentVerifiedAt?'done':''}"><b>2</b><span><strong>Pembayaran terverifikasi</strong><small>${esc(invoiceDate(o.paymentVerifiedAt))}</small></span></div>
+      <div class="${o.processingAt||o.status==='completed'?'done':''}"><b>3</b><span><strong>Diproses</strong><small>${esc(invoiceDate(o.processingAt))}</small></span></div>
+      <div class="${o.completedAt||o.status==='completed'?'done':''}"><b>4</b><span><strong>Selesai</strong><small>${esc(invoiceDate(o.completedAt))}</small></span></div>
+    </div>
+    <div class="invoice-customer"><div><span>Ditagihkan kepada</span><strong>${esc(o.name)}</strong><small>${esc(o.email)}${o.phone?` · ${esc(o.phone)}`:''}</small></div>${o.bank?`<div><span>Rekening tujuan</span><strong>${esc(o.bank.name)}</strong><small>${esc(o.bank.number)} · ${esc(o.bank.holder)}</small></div>`:''}</div>
+    <div class="invoice-table-wrap"><table class="invoice-table"><thead><tr><th>Produk</th><th>Harga</th><th>Qty</th><th>Subtotal</th></tr></thead><tbody><tr><td><strong>${esc(o.productName)}</strong><small>${esc(o.duration)}</small></td><td>${money(o.price)}</td><td>${o.quantity}</td><td>${money(o.total)}</td></tr></tbody><tfoot><tr><td colspan="3">Total pembayaran</td><td>${money(o.total)}</td></tr></tfoot></table></div>
+    <p class="invoice-footnote">Invoice ini mengikuti status pesanan terbaru. Simpan nomor invoice untuk bantuan pelanggan.</p>
+  </div>`;
+}
+
+function printInvoice(orderId){
+  const o=state.orders.find(x=>x.id===orderId); if(!o){msg('Invoice tidak ditemukan.');return;}
+  const ps=invoicePaymentState(o); const inv=invoiceNumber(o); const method=paymentMethod(o);
+  const line=(label,value)=>`<tr><td>${esc(label)}</td><td>${esc(value||'—')}</td></tr>`;
+  const w=window.open('','_blank','width=900,height=900'); if(!w){msg('Izinkan pop-up browser untuk mencetak invoice.');return;}
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(inv)}</title><style>body{font-family:Arial,sans-serif;color:#0b1936;margin:36px}.brand{font-size:24px;font-weight:800;margin-bottom:28px}.top{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #0b1936;padding-bottom:18px}.top h1{margin:4px 0;font-size:28px}.muted{color:#667085}.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin:24px 0}.box{border:1px solid #dfe5ee;border-radius:12px;padding:16px}.box h3{margin-top:0}.meta{width:100%;border-collapse:collapse}.meta td{padding:6px 0;vertical-align:top}.meta td:first-child{color:#667085;width:42%}.items{width:100%;border-collapse:collapse;margin-top:24px}.items th,.items td{border-bottom:1px solid #dfe5ee;padding:12px 8px;text-align:left}.items th{font-size:12px;color:#667085}.items td:last-child,.items th:last-child{text-align:right}.total{font-size:20px;font-weight:800}.status{display:inline-block;padding:7px 10px;border-radius:999px;background:#eef4ff;font-weight:700}.foot{margin-top:30px;color:#667085;font-size:12px}@media print{button{display:none}}</style></head><body><div class="brand">Uply Digital</div><div class="top"><div><div class="muted">Invoice</div><h1>${esc(inv)}</h1><div class="muted">Order ${esc(o.id)}</div></div><div><span class="status">${esc(ps.label)}</span></div></div><div class="grid"><div class="box"><h3>Pelanggan</h3><strong>${esc(o.name)}</strong><div>${esc(o.email)}</div>${o.phone?`<div>${esc(o.phone)}</div>`:''}</div><div class="box"><h3>Detail transaksi</h3><table class="meta">${line('Tanggal order',invoiceDate(o.createdAt))}${line('Metode',method)}${line('Pembayaran dikirim',invoiceDate(o.paymentSubmittedAt))}${line('Pembayaran terverifikasi',invoiceDate(o.paymentVerifiedAt))}${line('Diproses',invoiceDate(o.processingAt))}${line('Selesai',invoiceDate(o.completedAt))}</table></div></div><table class="items"><thead><tr><th>Produk</th><th>Harga</th><th>Qty</th><th>Subtotal</th></tr></thead><tbody><tr><td><strong>${esc(o.productName)}</strong><div class="muted">${esc(o.duration)}</div></td><td>${money(o.price)}</td><td>${o.quantity}</td><td>${money(o.total)}</td></tr></tbody><tfoot><tr><td colspan="3" class="total">Total</td><td class="total">${money(o.total)}</td></tr></tfoot></table><p class="foot">Invoice dibuat dari status pesanan Uply Digital terbaru. Nomor invoice: ${esc(inv)}.</p><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
+  w.document.close();
 }
 
 function orderDetail(id){
@@ -215,7 +265,9 @@ function orderDetail(id){
   if(o.status==='pending_payment' && o.paymentMode==='midtrans'){
     pay=`<div class="panel"><h2>Pembayaran otomatis</h2><p>Status gateway: ${esc(o.gatewayStatus||'belum dibuat')}</p>${o.paymentUrl?`<a class="btn" href="${esc(o.paymentUrl)}">Lanjut pembayaran</a>`:`<button class="btn" data-pay="${esc(o.id)}">Buat ulang pembayaran</button>`}</div>`;
   }
-  return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">${esc(o.id)}</div><h1>${esc(o.productName)}</h1><p>${dt(o.createdAt)} · ${status(o.status)}</p></div><div class="two"><div class="stack">${pay}${o.note?`<div class="notice">${esc(o.note)}</div>`:''}${o.status==='completed'?`<div class="panel"><h2>Detail produk</h2><pre class="delivery">${esc(o.delivery)}</pre></div>`:''}</div><aside class="panel"><h2>Ringkasan</h2><p>${esc(o.duration)} · ${o.quantity} produk</p><div class="price">${money(o.total)}</div><p class="tiny">Penerima: ${esc(o.name)}<br>${esc(o.email)}${o.phone?`<br>${esc(o.phone)}`:''}</p>${o.status==='pending_payment'?`<button class="btn danger small" data-cancel="${esc(o.id)}">Batalkan pesanan</button>`:''}</aside></div></div></section>`;
+  const invoice=invoiceVisible(o)?invoiceHTML(o):'';
+  const progressNotice=o.status==='review'?`<div class="notice ok"><strong>Bukti pembayaran sudah diterima.</strong><br>Invoice sementara sudah tersedia dan akan diperbarui setelah admin memverifikasi pembayaran.</div>`:o.status==='processing'?`<div class="notice ok"><strong>Pembayaran terverifikasi.</strong><br>Pesanan sedang diproses. Invoice sudah diperbarui otomatis.</div>`:o.status==='completed'?`<div class="notice ok"><strong>Pesanan selesai.</strong><br>Invoice final dan detail produk sudah tersedia di bawah.</div>`:'';
+  return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">${esc(o.id)}</div><h1>${esc(o.productName)}</h1><p>${dt(o.createdAt)} · ${status(o.status)}</p></div>${progressNotice}<div class="two"><div class="stack">${pay}${o.note?`<div class="notice">${esc(o.note)}</div>`:''}${o.status==='completed'?`<div class="panel"><h2>Detail produk</h2><pre class="delivery">${esc(o.delivery)}</pre></div>`:''}</div><aside class="panel"><h2>Ringkasan</h2><p>${esc(o.duration)} · ${o.quantity} produk</p><div class="price">${money(o.total)}</div><p class="tiny">Penerima: ${esc(o.name)}<br>${esc(o.email)}${o.phone?`<br>${esc(o.phone)}`:''}</p>${o.status==='pending_payment'?`<button class="btn danger small" data-cancel="${esc(o.id)}">Batalkan pesanan</button>`:''}</aside></div>${invoice}</div></section>`;
 }
 
 async function adminPage(){
@@ -336,7 +388,7 @@ app.addEventListener('change', e => {
   if(e.target.id==='inventoryProductFilter'){ state.inventoryProduct=e.target.value; $('#adminContent').innerHTML=adminContent(); }
   if(e.target.id==='inventoryStatusFilter'){ state.inventoryStatus=e.target.value; $('#adminContent').innerHTML=adminContent(); }
   if(e.target.id==='checkoutQuantity'){
-    const form=e.target.closest('#checkoutForm'); const p=state.catalog.products.find(x=>x.id===form?.dataset.product); const out=$('#checkoutTotal'); if(p&&out) out.textContent=money(Number(p.price)*Number(e.target.value||1));
+    const form=e.target.closest('#checkoutForm'); const p=state.catalog.products.find(x=>x.id===form?.dataset.productId); const out=$('#checkoutTotal'); if(p&&out) out.textContent=money(Number(p.price)*Number(e.target.value||1));
   }
   if(e.target.id==='checkoutChannel'){
     const form=e.target.closest('#checkoutForm'); const phoneInput=form?.elements?.phone; if(phoneInput) phoneInput.required=e.target.value==='whatsapp';
@@ -344,7 +396,7 @@ app.addEventListener('change', e => {
 });
 
 document.addEventListener('click', async e => {
-  const product = e.target.closest('[data-product]'); if(product){ productModal(product.dataset.product); return; }
+  const product = e.target.closest('[data-view-product]'); if(product){ productModal(product.dataset.viewProduct); return; }
   const chip = e.target.closest('[data-filter]'); if(chip){ state.filter=chip.dataset.filter; app.innerHTML=catalogPage(); document.getElementById('produk')?.scrollIntoView(); return; }
   if(e.target.closest('[data-open-login]')){ openModal('Masuk pelanggan',loginForm(false)); return; }
   const tab = e.target.closest('[data-admin-tab]'); if(tab){ state.adminTab=tab.dataset.adminTab; $('#adminContent').innerHTML=adminContent(); return; }
@@ -364,6 +416,7 @@ document.addEventListener('click', async e => {
   const pay = e.target.closest('[data-pay]'); if(pay){ try{const r=await api('retryPayment',{orderId:pay.dataset.pay}); if(r.paymentUrl) location.href=r.paymentUrl;}catch(err){msg(err.message)} return; }
   const cancel = e.target.closest('[data-cancel]'); if(cancel){ if(confirm('Batalkan pesanan ini?')){try{await api('cancelOrder',{orderId:cancel.dataset.cancel});state.orders=await api('orders');await route();msg('Pesanan dibatalkan.')}catch(err){msg(err.message)}}return; }
   const proof = e.target.closest('[data-proof]'); if(proof){ try{const r=await api('getProof',{orderId:proof.dataset.proof}); const url=`data:${r.mime};base64,${r.base64}`; window.open(url,'_blank','noopener,noreferrer');}catch(err){msg(err.message)} return; }
+  const printInv = e.target.closest('[data-print-invoice]'); if(printInv){ printInvoice(printInv.dataset.printInvoice); return; }
   const copy = e.target.closest('[data-copy]'); if(copy){ try{await navigator.clipboard.writeText(copy.dataset.copy);msg('Berhasil disalin.')}catch{msg('Tidak bisa menyalin otomatis.')} return; }
   const toggle = e.target.closest('[data-inventory-toggle]'); if(toggle){ try{await api('inventorySetStatus',{inventoryId:toggle.dataset.inventoryToggle,status:toggle.dataset.nextStatus});await refreshAdmin();msg('Status inventory diperbarui.')}catch(err){msg(err.message)} return; }
   const quick = e.target.closest('[data-quick]'); if(quick){ const q=quick.dataset.quick;if(q==='add-product'){editProduct('');return;}if(q==='inventory'){state.adminTab='inventory';$('#adminContent').innerHTML=adminContent();return;}if(q==='review'){state.adminTab='orders';state.adminOrderStatus='review';$('#adminContent').innerHTML=adminContent();return;}if(q==='settings'){state.adminTab='settings';$('#adminContent').innerHTML=adminContent();return;} }
@@ -394,7 +447,7 @@ document.addEventListener('submit', async e => {
       if(g('channel')==='whatsapp' && !g('phone').trim()) throw Error('Isi nomor WhatsApp jika detail ingin dikirim lewat WhatsApp.');
       if(state.catalog.settings.paymentMode==='manual' && !g('bankId')) throw Error('Belum ada rekening pembayaran aktif. Hubungi admin.');
       const req=(crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2));
-      const r=await api('createOrder',{productId:f.dataset.product,requestId:req,quantity:Number(g('quantity')),name:g('name'),phone:g('phone'),channel:g('channel'),bankId:g('bankId'),agree:true});
+      const r=await api('createOrder',{productId:f.dataset.productId,requestId:req,quantity:Number(g('quantity')),name:g('name'),phone:g('phone'),channel:g('channel'),bankId:g('bankId'),agree:true});
       state.orders=await api('orders');
       if(r.paymentUrl){msg('Pesanan dibuat. Membuka pembayaran…');setTimeout(()=>location.assign(r.paymentUrl),650)}
       else{location.hash='#pesanan/'+encodeURIComponent(r.order.id);await route();msg('Pesanan berhasil dibuat. Lanjutkan pembayaran.')}
