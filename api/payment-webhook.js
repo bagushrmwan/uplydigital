@@ -34,7 +34,7 @@ export default async function handler(req,res){
       await audit('midtrans','payment_verified',orderId,{status,paymentType:body.payment_type||''}); await fulfill(orderId);
     } else if(['expire','cancel','deny','failure'].includes(status)){
       if(order.status==='pending_payment' && order.stock_reserved){await q('UPDATE products SET stock=stock+$2,updated_at=NOW() WHERE id=$1 AND stock<>-1',[order.product_id,order.quantity]);}
-      await q(`UPDATE orders SET status='cancelled',gateway_status=$2,note='Pembayaran tidak diselesaikan atau ditolak oleh payment gateway.',stock_reserved=FALSE,updated_at=NOW() WHERE id=$1 AND status='pending_payment'`,[orderId,status]); await audit('midtrans','payment_failed',orderId,{status});
+      await q(`UPDATE orders SET status='cancelled',gateway_status=$2,note='Pembayaran tidak diselesaikan atau ditolak oleh payment gateway.',credentials_enc='',credentials_status=CASE WHEN credentials_enc<>'' THEN 'purged' ELSE credentials_status END,stock_reserved=FALSE,updated_at=NOW() WHERE id=$1 AND status='pending_payment'`,[orderId,status]); await audit('midtrans','payment_failed',orderId,{status});
     } else await q('UPDATE orders SET gateway_status=$2,updated_at=NOW() WHERE id=$1',[orderId,status]);
     return res.status(200).end(JSON.stringify({ok:true}));
   }catch(e){console.error('MIDTRANS WEBHOOK',e);return res.status(500).end(JSON.stringify({ok:false,error:'server error'}));}

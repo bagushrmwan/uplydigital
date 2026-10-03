@@ -1,5 +1,5 @@
 import { ensureSchema, q, pool, getSettings, audit } from '../lib/db.js';
-import { id, normalizeEmail, validEmail, hashPassword, verifyPassword, safeEqual, createSession, requireAuth, requireAdmin, destroySession, securityReady } from '../lib/security.js';
+import { id, normalizeEmail, validEmail, hashPassword, verifyPassword, safeEqual, createSession, requireAuth, requireAdmin, destroySession, securityReady, credentialSecurityReady, encryptCredentialPayload, decryptCredentialPayload } from '../lib/security.js';
 import { createSnap, midtransEnabled } from '../lib/midtrans.js';
 import { sendEmail } from '../lib/email.js';
 
@@ -11,10 +11,10 @@ function phone(v,required=false){
   if(!p&&!required) return ''; if(!/^[1-9]\d{8,14}$/.test(p)) throw safeError('Nomor WhatsApp tidak valid.'); return p;
 }
 function publicProduct(r,availableInventory){
-  return {id:r.id,name:r.name,category:r.category,duration:r.duration,price:Number(r.price),description:r.description,benefits:Array.isArray(r.benefits)?r.benefits:[],terms:r.terms,stock:r.fulfillment_mode==='inventory'?availableInventory:Number(r.stock),active:r.active,badge:r.badge,icon:r.icon,fulfillmentMode:r.fulfillment_mode};
+  return {id:r.id,name:r.name,category:r.category,duration:r.duration,price:Number(r.price),description:r.description,benefits:Array.isArray(r.benefits)?r.benefits:[],terms:r.terms,stock:r.fulfillment_mode==='inventory'?availableInventory:Number(r.stock),active:r.active,badge:r.badge,icon:r.icon,fulfillmentMode:r.fulfillment_mode,thumbnail:r.thumbnail_url||'',featured:!!r.featured,requiresLoginCredentials:!!r.requires_login_credentials,soldCount:Number(r.sold_count||0),bestSeller:!!r.best_seller};
 }
 function publicOrder(o,admin=false){
-  return {id:o.id,userId:admin?o.user_id:undefined,email:o.email,name:o.name,phone:o.phone,channel:o.channel,productId:o.product_id,productName:o.product_name,duration:o.duration,quantity:Number(o.quantity),price:Number(o.price),total:Number(o.total),status:o.status,paymentMode:o.payment_mode,gatewayStatus:o.gateway_status,paymentUrl:o.payment_url,createdAt:o.created_at,expiresAt:o.expires_at,updatedAt:o.updated_at,paymentSubmittedAt:o.payment_submitted_at,paymentVerifiedAt:o.payment_verified_at,processingAt:o.processing_at,completedAt:o.completed_at,hasProof:!!o.proof_name,proofName:o.proof_name,delivery:o.delivery,note:o.note,bank:o.bank_id?{id:o.bank_id,name:o.bank_name,number:o.bank_number,holder:o.bank_holder}:null};
+  return {id:o.id,userId:admin?o.user_id:undefined,email:o.email,name:o.name,phone:o.phone,channel:o.channel,productId:o.product_id,productName:o.product_name,productThumbnail:o.product_thumbnail||'',duration:o.duration,quantity:Number(o.quantity),price:Number(o.price),total:Number(o.total),status:o.status,paymentMode:o.payment_mode,gatewayStatus:o.gateway_status,paymentUrl:o.payment_url,createdAt:o.created_at,expiresAt:o.expires_at,updatedAt:o.updated_at,paymentSubmittedAt:o.payment_submitted_at,paymentVerifiedAt:o.payment_verified_at,processingAt:o.processing_at,completedAt:o.completed_at,hasProof:!!o.proof_name,proofName:o.proof_name,delivery:o.delivery,note:o.note,hasCredentials:admin?!!o.credentials_enc:undefined,credentialsStatus:admin?(o.credentials_status||''):undefined,credentialsViewedAt:admin?o.credentials_viewed_at:undefined,bank:o.bank_id?{id:o.bank_id,name:o.bank_name,number:o.bank_number,holder:o.bank_holder}:null};
 }
 function originHeaders(req){
   const origin=String(req.headers.origin||''); const allowed=process.env.ALLOWED_ORIGIN||process.env.SITE_URL||'';
@@ -30,21 +30,24 @@ async function expireOldOrders(){
     const {rows:reserved}=await client.query(`SELECT product_id,quantity FROM orders WHERE status='pending_payment' AND expires_at<NOW() AND payment_mode='manual' AND stock_reserved=TRUE FOR UPDATE`);
     const restore=new Map();
     for(const r of reserved) restore.set(r.product_id,(restore.get(r.product_id)||0)+Number(r.quantity));
-    await client.query(`UPDATE orders SET status='cancelled',note=CASE WHEN note='' THEN 'Pesanan otomatis kedaluwarsa.' ELSE note END,updated_at=NOW(),stock_reserved=FALSE WHERE status='pending_payment' AND expires_at<NOW() AND payment_mode='manual'`);
+    await client.query(`UPDATE orders SET status='cancelled',note=CASE WHEN note='' THEN 'Pesanan otomatis kedaluwarsa.' ELSE note END,credentials_enc='',credentials_status=CASE WHEN credentials_enc<>'' THEN 'purged' ELSE credentials_status END,updated_at=NOW(),stock_reserved=FALSE WHERE status='pending_payment' AND expires_at<NOW() AND payment_mode='manual'`);
     for(const [pid,qty] of restore) await client.query('UPDATE products SET stock=stock+$2,updated_at=NOW() WHERE id=$1 AND stock<>-1',[pid,qty]);
     await client.query('DELETE FROM sessions WHERE expires_at<NOW()');
     await client.query('COMMIT');
   }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
 }
 async function catalog(){
-  const [pr,ir,br,s]=await Promise.all([
-    q('SELECT * FROM products WHERE active=TRUE ORDER BY created_at,id'),
+  const [pr,ir,br,s,sales]=await Promise.all([
+    q(`SELECT p.*,COALESCE(sc.sold_count,0)::int AS sold_count FROM products p LEFT JOIN (SELECT product_id,COUNT(*)::int AS sold_count FROM orders WHERE status='completed' GROUP BY product_id) sc ON sc.product_id=p.id WHERE p.active=TRUE ORDER BY p.featured DESC,p.created_at,p.id`),
     q(`SELECT product_id,COUNT(*)::int AS available FROM inventory WHERE status='available' GROUP BY product_id`),
     q('SELECT id,name,number,holder,active FROM banks WHERE active=TRUE ORDER BY created_at,id'),
-    getSettings()
+    getSettings(),
+    q(`SELECT product_id,COUNT(*)::int AS n FROM orders WHERE status='completed' GROUP BY product_id ORDER BY n DESC LIMIT 3`)
   ]);
   const inv=Object.fromEntries(ir.rows.map(x=>[x.product_id,Number(x.available)]));
-  return {products:pr.rows.map(p=>publicProduct(p,inv[p.id]||0)),banks:br.rows,settings:{storeName:s.storeName||'Uply Digital',whatsapp:s.whatsapp||'',hours:s.hours||'',storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,notice:s.notice||'',paymentMode:midtransEnabled()?'midtrans':'manual'}};
+  const best=new Set(sales.rows.filter(x=>Number(x.n)>0).map(x=>x.product_id));
+  const products=pr.rows.map(p=>publicProduct({...p,best_seller:best.has(p.id)},inv[p.id]||0));
+  return {products,banks:br.rows,settings:{storeName:s.storeName||'Uply Digital',whatsapp:s.whatsapp||'',hours:s.hours||'',storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,notice:s.notice||'',promoBanner:s.promoBanner||'',paymentMode:midtransEnabled()?'midtrans':'manual'}};
 }
 async function getUserById(userId){ const {rows}=await q('SELECT id,email,name,phone,created_at FROM users WHERE id=$1 LIMIT 1',[userId]); return rows[0]; }
 async function autoFulfill(orderId){
@@ -125,14 +128,22 @@ export default async function handler(req,res){
         if(prod.fulfillment_mode==='inventory'){const c=await q(`SELECT COUNT(*)::int AS n FROM inventory WHERE product_id=$1 AND status='available'`,[prod.id]); if(Number(c.rows[0].n)<qty) throw safeError('Stok inventory otomatis tidak mencukupi.');}
         else if(Number(prod.stock)!==-1&&Number(prod.stock)<qty) throw safeError('Stok produk tidak mencukupi.');
         const name=text(p.name||u.name,80); if(name.length<2) throw safeError('Nama penerima wajib diisi.'); const channel=p.channel==='whatsapp'?'whatsapp':'email'; const ph=phone(p.phone,channel==='whatsapp');
+        const requiresLogin=bool(prod.requires_login_credentials)||String(prod.category).toLowerCase().replace(/\s+/g,'')==='topup'; let credentialsEnc='';
+        if(requiresLogin){
+          if(!credentialSecurityReady()) throw safeError('Top Up belum siap diproses karena CREDENTIAL_ENCRYPTION_KEY belum diatur.',500);
+          const accountEmail=normalizeEmail(p.accountEmail), accountPassword=String(p.accountPassword||'');
+          if(!validEmail(accountEmail)) throw safeError('Email login akun Top Up tidak valid.');
+          if(accountPassword.length<4||accountPassword.length>200) throw safeError('Password login akun Top Up belum valid.');
+          credentialsEnc=encryptCredentialPayload({email:accountEmail,password:accountPassword});
+        }
         const mode=midtransEnabled()?'midtrans':'manual'; let bank={id:'',name:'',number:'',holder:''};
         if(mode==='manual'){
           const {rows:bs}=await q('SELECT * FROM banks WHERE id=$1 AND active=TRUE LIMIT 1',[text(p.bankId,100)]); if(!bs[0]) throw safeError('Rekening pembayaran tidak tersedia. Minta admin mengaktifkan minimal satu rekening.'); bank=bs[0];
         }
         const orderId=`UPL-${new Date().toISOString().slice(2,10).replace(/-/g,'')}-${Math.random().toString(36).slice(2,10).toUpperCase()}`;
         const total=Number(prod.price)*qty; const hours=Math.max(1,Math.min(72,Number(settings.paymentHours)||24)); const customerNote=text(p.customerNote,800);
-        const {rows:ors}=await q(`INSERT INTO orders(id,user_id,email,name,phone,channel,product_id,product_name,duration,quantity,price,total,bank_id,bank_name,bank_number,bank_holder,note,status,payment_mode,expires_at,request_id,stock_reserved)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'pending_payment',$18,NOW()+($19 || ' hours')::interval,$20,$21) RETURNING *`,[orderId,u.id,u.email,name,ph,channel,prod.id,prod.name,prod.duration,qty,Number(prod.price),total,bank.id||'',bank.name||'',bank.number||'',bank.holder||'',customerNote,mode,String(hours),requestId,(Number(prod.stock)!==-1&&prod.fulfillment_mode!=='inventory')]);
+        const {rows:ors}=await q(`INSERT INTO orders(id,user_id,email,name,phone,channel,product_id,product_name,product_thumbnail,duration,quantity,price,total,bank_id,bank_name,bank_number,bank_holder,note,status,payment_mode,expires_at,request_id,stock_reserved,credentials_enc,credentials_status)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'pending_payment',$19,NOW()+($20 || ' hours')::interval,$21,$22,$23,$24) RETURNING *`,[orderId,u.id,u.email,name,ph,channel,prod.id,prod.name,prod.thumbnail_url||'',prod.duration,qty,Number(prod.price),total,bank.id||'',bank.name||'',bank.number||'',bank.holder||'',customerNote,mode,String(hours),requestId,(Number(prod.stock)!==-1&&prod.fulfillment_mode!=='inventory'),credentialsEnc,credentialsEnc?'encrypted':'']);
         let order=ors[0]; let paymentUrl='';
         if(Number(prod.stock)!==-1 && prod.fulfillment_mode!=='inventory') await q('UPDATE products SET stock=GREATEST(stock-$2,0),updated_at=NOW() WHERE id=$1',[prod.id,qty]);
         if(mode==='midtrans'){
@@ -157,7 +168,7 @@ export default async function handler(req,res){
     }
     else if(action==='cancelOrder'){
       const u=await requireAuth(req); const orderId=text(p.orderId,80); const {rows}=await q('SELECT * FROM orders WHERE id=$1 AND user_id=$2 LIMIT 1',[orderId,u.id]); const o=rows[0]; if(!o||o.status!=='pending_payment') throw safeError('Pesanan ini tidak dapat dibatalkan sendiri.');
-      await q(`UPDATE orders SET status='cancelled',note='Dibatalkan pelanggan sebelum pembayaran terverifikasi.',updated_at=NOW() WHERE id=$1`,[orderId]);
+      await q(`UPDATE orders SET status='cancelled',note='Dibatalkan pelanggan sebelum pembayaran terverifikasi.',credentials_enc='',credentials_status=CASE WHEN credentials_enc<>'' THEN 'purged' ELSE credentials_status END,updated_at=NOW() WHERE id=$1`,[orderId]);
       if(o.stock_reserved){await q('UPDATE products SET stock=stock+$2,updated_at=NOW() WHERE id=$1 AND stock<>-1',[o.product_id,o.quantity]);await q('UPDATE orders SET stock_reserved=FALSE WHERE id=$1',[orderId]);}
       await audit(u.email,'order_cancelled',orderId,{}); data=true;
     }
@@ -175,20 +186,20 @@ export default async function handler(req,res){
     }
     else if(action==='saveProduct'){
       const a=await requireAdmin(req); const x=p.product||{}; let pid=text(x.id,100); if(!pid) pid=id('prd');
-      const name=text(x.name,80),category=text(x.category,60)||'Digital',duration=text(x.duration,80),price=Number(x.price),stock=Number(x.stock),mode=x.fulfillmentMode==='inventory'?'inventory':'manual';
+      const name=text(x.name,80),category=text(x.category,60)||'Digital',duration=text(x.duration,80),price=Number(x.price),stock=Number(x.stock); const isTopUp=category.toLowerCase().replace(/\s+/g,'')==='topup'; const mode=isTopUp?'manual':(x.fulfillmentMode==='inventory'?'inventory':'manual'); const requiresLogin=isTopUp||bool(x.requiresLoginCredentials); let thumbnail=text(x.thumbnail,500); if(thumbnail && !thumbnail.startsWith('/assets/') && !/^https:\/\//i.test(thumbnail)) throw safeError('Thumbnail harus berupa path /assets/... atau URL HTTPS.'); const featured=bool(x.featured);
       if(name.length<2||!Number.isInteger(price)||price<1000||!Number.isInteger(stock)||stock<-1) throw safeError('Data produk belum valid.');
       const benefits=Array.isArray(x.benefits)?x.benefits.map(v=>text(v,150)).filter(Boolean).slice(0,20):[];
-      await q(`INSERT INTO products(id,name,category,duration,price,description,benefits,terms,stock,active,badge,icon,fulfillment_mode,updated_at)
-        VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13,NOW())
-        ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,category=EXCLUDED.category,duration=EXCLUDED.duration,price=EXCLUDED.price,description=EXCLUDED.description,benefits=EXCLUDED.benefits,terms=EXCLUDED.terms,stock=EXCLUDED.stock,active=EXCLUDED.active,badge=EXCLUDED.badge,icon=EXCLUDED.icon,fulfillment_mode=EXCLUDED.fulfillment_mode,updated_at=NOW()`,[pid,name,category,duration,price,text(x.description,300),JSON.stringify(benefits),text(x.terms,2000),stock,bool(x.active),text(x.badge,40),text(x.icon,30)||'generic',mode]);
-      await audit(a.email,'product_saved',pid,{name,mode}); data={id:pid};
+      await q(`INSERT INTO products(id,name,category,duration,price,description,benefits,terms,stock,active,badge,icon,fulfillment_mode,thumbnail_url,featured,requires_login_credentials,updated_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW())
+        ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,category=EXCLUDED.category,duration=EXCLUDED.duration,price=EXCLUDED.price,description=EXCLUDED.description,benefits=EXCLUDED.benefits,terms=EXCLUDED.terms,stock=EXCLUDED.stock,active=EXCLUDED.active,badge=EXCLUDED.badge,icon=EXCLUDED.icon,fulfillment_mode=EXCLUDED.fulfillment_mode,thumbnail_url=EXCLUDED.thumbnail_url,featured=EXCLUDED.featured,requires_login_credentials=EXCLUDED.requires_login_credentials,updated_at=NOW()`,[pid,name,category,duration,price,text(x.description,300),JSON.stringify(benefits),text(x.terms,2000),stock,bool(x.active),text(x.badge,40),text(x.icon,30)||'generic',mode,thumbnail,featured,requiresLogin]);
+      await audit(a.email,'product_saved',pid,{name,mode,featured,requiresLogin}); data={id:pid};
     }
     else if(action==='saveBank'){
       const a=await requireAdmin(req); const x=p.bank||{}; const bid=text(x.id,100)||id('bank'); const name=text(x.name,70),number=text(x.number,30).replace(/\D/g,''),holder=text(x.holder,90); if(!name||number.length<6||!holder) throw safeError('Data rekening belum lengkap.');
       await q(`INSERT INTO banks(id,name,number,holder,active,updated_at) VALUES($1,$2,$3,$4,$5,NOW()) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,number=EXCLUDED.number,holder=EXCLUDED.holder,active=EXCLUDED.active,updated_at=NOW()`,[bid,name,number,holder,bool(x.active)]); await audit(a.email,'bank_saved',bid,{name}); data=true;
     }
     else if(action==='saveSettings'){
-      const a=await requireAdmin(req); const x=p.settings||{}; const vals={storeName:text(x.storeName,60)||'Uply Digital',whatsapp:phone(x.whatsapp,false),hours:text(x.hours,120),paymentHours:String(Math.max(1,Math.min(72,Number(x.paymentHours)||24))),notice:text(x.notice,250),storeOpen:String(bool(x.storeOpen))};
+      const a=await requireAdmin(req); const x=p.settings||{}; const vals={storeName:text(x.storeName,60)||'Uply Digital',whatsapp:phone(x.whatsapp,false),hours:text(x.hours,120),paymentHours:String(Math.max(1,Math.min(72,Number(x.paymentHours)||24))),notice:text(x.notice,250),promoBanner:text(x.promoBanner,180),storeOpen:String(bool(x.storeOpen))};
       for(const [k,v] of Object.entries(vals)) await q(`INSERT INTO settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`,[k,v]); await audit(a.email,'settings_saved','',{}); data=true;
     }
     else if(action==='inventoryAdd'){
@@ -215,6 +226,16 @@ export default async function handler(req,res){
       const exists=await q('SELECT 1 FROM products WHERE id=$1',[productId]); if(!exists.rowCount) throw safeError('Produk tidak ditemukan.');
       let added=0; for(const value of items){await q("INSERT INTO inventory(id,product_id,item_value,note,status) VALUES($1,$2,$3,'','available')",[id('inv'),productId,value]);added++;} await audit(a.email,'inventory_imported',productId,{count:added}); data={added};
     }
+    else if(action==='getOrderCredentials'){
+      const a=await requireAdmin(req); const orderId=text(p.orderId,80);
+      const {rows}=await q(`SELECT id,product_name,status,credentials_enc,credentials_status FROM orders WHERE id=$1 LIMIT 1`,[orderId]); const o=rows[0];
+      if(!o||!o.credentials_enc) throw safeError('Data login tidak tersedia atau sudah dihapus.');
+      if(o.status!=='processing') throw safeError('Data login hanya dapat dibuka setelah pembayaran terverifikasi dan order masuk status Sedang diproses.');
+      const credentials=decryptCredentialPayload(o.credentials_enc);
+      await q(`UPDATE orders SET credentials_status='viewed',credentials_viewed_at=NOW(),updated_at=NOW() WHERE id=$1`,[orderId]);
+      await audit(a.email,'order_credentials_viewed',orderId,{product:o.product_name});
+      data={email:credentials.email,password:credentials.password,notice:'Gunakan hanya untuk memproses pesanan ini. Jangan meminta OTP atau recovery code.'};
+    }
     else if(action==='updateOrder'){
       const a=await requireAdmin(req); const orderId=text(p.orderId,80); const status=text(p.status,30); if(!['pending_payment','review','processing','completed','cancelled'].includes(status)) throw safeError('Status tidak valid.');
       const {rows}=await q('SELECT * FROM orders WHERE id=$1 LIMIT 1',[orderId]); const old=rows[0]; if(!old) throw safeError('Pesanan tidak ditemukan.');
@@ -227,6 +248,8 @@ export default async function handler(req,res){
         payment_verified_at=CASE WHEN $2 IN ('processing','completed') AND payment_verified_at IS NULL THEN NOW() ELSE payment_verified_at END,
         processing_at=CASE WHEN $2='processing' AND processing_at IS NULL THEN NOW() WHEN $2='completed' AND processing_at IS NULL THEN NOW() ELSE processing_at END,
         completed_at=CASE WHEN $2='completed' AND completed_at IS NULL THEN NOW() ELSE completed_at END,
+        credentials_enc=CASE WHEN $2 IN ('completed','cancelled') THEN '' ELSE credentials_enc END,
+        credentials_status=CASE WHEN $2 IN ('completed','cancelled') AND credentials_status<>'' THEN 'purged' ELSE credentials_status END,
         stock_reserved=CASE WHEN $2 IN ('processing','completed','cancelled') THEN FALSE ELSE stock_reserved END,updated_at=NOW() WHERE id=$1`,[orderId,status,delivery,note]); await audit(a.email,'order_status_updated',orderId,{from:old.status,to:status});
       if(status==='processing') await autoFulfill(orderId);
       if(status==='completed') await sendEmail(old.email,`Pesanan ${orderId} selesai`,`<h2>Pesanan selesai</h2><p>${escapeHtml(old.product_name)}</p><pre style="white-space:pre-wrap">${escapeHtml(delivery)}</pre>`);
