@@ -1,22 +1,10 @@
-# Hasil Pengujian — Uply Digital V20
+# Hasil Pengujian V21
 
-Pengujian build lokal sebelum packaging:
+Pengujian lokal yang dilakukan:
+- `node --check app.js`
+- syntax check seluruh API Vercel dan lib backend
+- smoke check file wajib
+- validasi `market.css` dan referensi asset
+- pengecekan struktur ZIP
 
-- `node --check app.js` — PASS
-- `node --check api/uply.js` — PASS
-- `node --check api/health.js` — PASS
-- `node --check api/payment-webhook.js` — PASS
-- `node --check api/product-image.js` — PASS
-- `node --check lib/db.js` — PASS
-- `node --check lib/security.js` — PASS
-- `node --check lib/midtrans.js` — PASS
-- `node --check lib/payment-state.js` — PASS
-- XML parse seluruh SVG thumbnail — PASS
-- Smoke check struktur Vercel/API/assets — PASS
-- Scan runtime untuk string Cloudflare/Wrangler — PASS
-
-Catatan:
-
-- Transaksi Midtrans Production nyata tidak dapat diuji tanpa Server Key merchant pemilik website.
-- Koneksi Neon production tidak dapat diuji tanpa `DATABASE_URL` pemilik website.
-- Setelah deployment, validasi akhir wajib dilakukan melalui `/api/health`, satu order baru, webhook Midtrans, update stok, dan upload thumbnail dari Panel Admin.
+Backend production (Neon/Midtrans) tetap memerlukan Environment Variables milik pengguna dan perlu diuji lagi setelah deploy.

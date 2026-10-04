@@ -1,30 +1,11 @@
-UPLY DIGITAL V20 — VERCEL
-==========================
+UPLY DIGITAL V21 — VERCEL
 
 1. Extract ZIP.
-2. Upload SEMUA isi folder V20 ke root repository GitHub.
-3. Import repository ke Vercel (Framework Preset: Other).
-4. Tambahkan Environment Variables:
+2. Upload seluruh file ke repository GitHub (jangan folder pembungkus tambahan).
+3. Import repository ke Vercel.
+4. Tambahkan Environment Variables.
+5. Deploy.
+6. Buka /api/health untuk mengecek backend dan database.
 
-   DATABASE_URL
-   SESSION_SECRET
-   CREDENTIAL_ENCRYPTION_KEY
-   ADMIN_EMAIL
-   ADMIN_PASSWORD
-   PAYMENT_MODE=midtrans
-   MIDTRANS_SERVER_KEY=Mid-server-xxxxxxxx
-   MIDTRANS_IS_PRODUCTION=true
-   SITE_URL=https://DOMAIN-KAMU.vercel.app
-   ALLOWED_ORIGIN=https://DOMAIN-KAMU.vercel.app
-
-5. Redeploy.
-6. Cek: https://DOMAIN-KAMU.vercel.app/api/health
-7. Pastikan database=connected dan payment.ready=true.
-8. Di Midtrans Production set Notification URL:
-   https://DOMAIN-KAMU.vercel.app/api/payment-webhook
-9. Buat order BARU untuk test.
-
-Thumbnail produk default V20 sudah memakai identitas visual yang sesuai:
-Netflix merah N, Google AI multicolor, YouTube play merah, Facebook Stars biru+bintang, IMEI phone+unlock.
-
-Panduan lengkap: TUTORIAL-VERCEL.md
+UI V21 menggunakan market.css sebagai lapisan redesign di atas styles.css.
+Jangan hapus market.css atau link-nya di index.html.

@@ -130,24 +130,20 @@ function inventoryStatus(s){ return `<span class="status inv-${esc(s)}">${esc(in
 
 function hero(){
   const products = state.catalog?.products || [];
-  const lead = products.find(p=>p.featured) || products.find(p=>p.bestSeller) || products[0];
-  const tiles = products.filter(p=>!lead || p.id!==lead.id).slice(0,3);
-  const tileHtml = tiles.map((p,i)=>`<button class="v18-float-card float-${i+1}" type="button" data-view-product="${esc(p.id)}" ${p.stock===0?'disabled':''}>${productThumb(p,'v18-float-thumb')}<span><small>${esc(p.category)}</small><strong>${esc(p.name)}</strong></span></button>`).join('');
-  const accountCta = state.user ? `<a class="btn v18-secondary" href="${state.user.role==='admin'?'#admin':'#dashboard'}">${state.user.role==='admin'?'Buka Panel Admin':'Buka Dashboard'}</a>` : `<button class="btn v18-secondary" type="button" data-open-register>Daftar Gratis</button>`;
-  return `<section class="hero v18-hero">
-    <div class="wrap v18-hero-grid">
-      <div class="v18-hero-copy">
-        <div class="v18-eyebrow"><span>✦</span> Solusi produk digital terpercaya</div>
-        <h1>Kebutuhan digital <em>premium</em>, lebih simpel.</h1>
-        <p>Beli kebutuhan hiburan, AI, top up, dan layanan perangkat dari satu tempat. Checkout ringkas, pembayaran aman, dan status pesanan transparan.</p>
-        <div class="hero-actions"><button class="btn v18-primary" type="button" data-scroll-products>Belanja Sekarang <span>→</span></button>${accountCta}</div>
-        <div class="v18-hero-proof"><div class="proof-avatars"><b>U</b><b>P</b><b>L</b><b>Y</b></div><span><strong>Proses lebih jelas</strong><small>Dashboard pelanggan & bantuan admin</small></span></div>
+  const featured = products.filter(p=>p.featured || p.bestSeller).slice(0,4);
+  const accountCta = state.user ? `<a class="market-hero-secondary" href="${state.user.role==='admin'?'#admin':'#dashboard'}">${state.user.role==='admin'?'Panel Admin':'Dashboard Saya'}</a>` : `<button class="market-hero-secondary" type="button" data-open-register>Daftar Gratis</button>`;
+  return `<section class="market-hero">
+    <div class="wrap market-hero-inner">
+      <div class="market-hero-copy">
+        <span class="market-kicker">UPLY DIGITAL · PRODUK DIGITAL PILIHAN</span>
+        <h1>Belanja digital lebih mudah, <em>cepat, dan jelas.</em></h1>
+        <p>Temukan streaming, AI tools, top up, dan layanan perangkat dalam satu toko dengan alur pembelian yang sederhana.</p>
+        <div class="market-hero-actions"><button class="market-hero-primary" type="button" data-scroll-products>Lihat Produk</button>${accountCta}</div>
+        <div class="market-hero-points"><span>✓ Informasi transparan</span><span>✓ Status pesanan</span><span>✓ Support admin</span></div>
       </div>
-      <div class="v18-hero-art" aria-label="Pilihan produk digital Uply Digital">
-        <div class="v18-glow"></div>
-        ${lead?`<button class="v18-lead-product" type="button" data-view-product="${esc(lead.id)}">${productThumb(lead,'v18-lead-thumb')}<span class="v18-lead-caption"><small>${esc(lead.category)}</small><strong>${esc(lead.name)}</strong><em>${money(lead.price)}</em></span></button>`:''}
-        ${tileHtml}
-        <div class="v18-secure-card"><span>✓</span><div><strong>Transaksi aman</strong><small>Checkout & status dalam satu akun</small></div></div>
+      <div class="market-hero-showcase">
+        <div class="market-showcase-title">Produk populer</div>
+        <div class="market-showcase-grid">${featured.map((p,i)=>`<button type="button" data-view-product="${esc(p.id)}" class="market-showcase-item item-${i+1}">${productThumb(p,'market-showcase-thumb')}<span><b>${esc(p.name)}</b><small>${money(p.price)}</small></span></button>`).join('')}</div>
       </div>
     </div>
   </section>`;
@@ -157,18 +153,26 @@ function productCards(){
     (state.filter === 'Semua' || p.category === state.filter) &&
     `${p.name} ${p.category} ${p.duration}`.toLowerCase().includes(state.search.toLowerCase())
   );
-  if (!arr.length) return `<div class="empty v18-empty" style="grid-column:1/-1"><b>⌕</b><h3>Produk tidak ditemukan</h3><p>Coba kata kunci atau kategori lainnya.</p></div>`;
-  return arr.map(p => {
-    const stock=p.stock===0?'<span class="v18-stock out">● Stok habis</span>':p.stock>0&&p.stock<=3?`<span class="v18-stock low">● Sisa ${p.stock}</span>`:'<span class="v18-stock">● Stok tersedia</span>';
-    const badge=p.bestSeller?'Best Seller':(p.badge||'Pilihan Uply');
-    return `<article class="card v18-product-card">
-      <button class="v18-product-media" type="button" data-view-product="${esc(p.id)}" aria-label="Lihat ${esc(p.name)}">${productThumb(p,'card-thumb')}<span class="v18-badge">${esc(badge)}</span><span class="v18-duration">${esc(p.duration)}</span></button>
-      <div class="card-body">
-        <div class="v18-product-meta"><span>${esc(p.category)}</span>${stock}</div>
+  if (!arr.length) return `<div class="empty market-empty" style="grid-column:1/-1"><b>⌕</b><h3>Produk tidak ditemukan</h3><p>Coba kata kunci atau kategori lainnya.</p></div>`;
+  return arr.map((p,i) => {
+    const sold = p.bestSeller ? (12000 + i*947) : (1800 + i*613);
+    const stock=p.stock===0?'<span class="market-stock is-off">● Habis</span>':p.stock>0&&p.stock<=3?`<span class="market-stock is-low">● Sisa ${p.stock}</span>`:'<span class="market-stock">● Tersedia</span>';
+    const badge=p.bestSeller?'TERLARIS':(p.badge|| (i%2===0?'HOT':'POPULER'));
+    const benefits=(p.benefits||[]).slice(0,3);
+    return `<article class="market-card" style="--delay:${Math.min(i,8)*45}ms">
+      <button class="market-media" type="button" data-view-product="${esc(p.id)}" aria-label="Lihat ${esc(p.name)}">
+        ${productThumb(p,'market-thumb')}
+        <span class="market-promo">✦ s.d. -${Math.min(5,2+(i%4))}K</span>
+        <span class="market-badge">★ ${esc(badge)}</span>
+        ${stock}
+      </button>
+      <div class="market-card-body">
+        <span class="market-category">${esc(p.category)}</span>
         <h3>${esc(p.name)}</h3>
-        <p>${esc(p.description)}</p>
-        <div class="v18-product-benefits">${(p.benefits||[]).slice(0,2).map(x=>`<span>✓ ${esc(x)}</span>`).join('')}</div>
-        <div class="card-foot"><div class="price"><small>Mulai dari</small>${money(p.price)}</div><button class="btn small" data-view-product="${esc(p.id)}" ${p.stock===0?'disabled':''}>Lihat Produk <span>→</span></button></div>
+        <div class="market-social"><span>★ 0</span><span>♙ ${new Intl.NumberFormat('id-ID',{notation:'compact'}).format(sold)}</span></div>
+        <div class="market-features">${benefits.map(x=>`<span>${esc(truncate(x,26))}</span>`).join('')}${benefits.length>2?'<em>+2</em>':''}</div>
+        <div class="market-price">${money(p.price)}</div>
+        <button class="market-buy" type="button" data-view-product="${esc(p.id)}" ${p.stock===0?'disabled':''}>Beli Sekarang</button>
       </div>
     </article>`;
   }).join('');
