@@ -160,6 +160,28 @@ export default async function handler(req,res){
       const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
       const {rows}=await q('SELECT * FROM orders WHERE user_id=$1 ORDER BY created_at DESC LIMIT 200',[u.id]); data=rows.map(x=>publicOrder(x));
     }
+    else if(action==='checkoutPreflight'){
+      const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
+      const settings=await getSettings(); if(!bool(settings.storeOpen)) throw safeError('Toko sedang menutup pesanan baru.');
+      const qty=Number(p.quantity); if(!Number.isInteger(qty)||qty<1||qty>5) throw safeError('Jumlah produk harus 1–5.');
+      const {rows}=await q('SELECT * FROM products WHERE id=$1 AND active=TRUE LIMIT 1',[text(p.productId,100)]); const prod=rows[0]; if(!prod) throw safeError('Produk tidak tersedia.');
+      if(prod.fulfillment_mode==='inventory'){
+        const c=await q(`SELECT COUNT(*)::int AS n FROM inventory WHERE product_id=$1 AND status='available'`,[prod.id]); if(Number(c.rows[0]?.n||0)<qty) throw safeError('Stok inventory otomatis tidak mencukupi.');
+      } else if(Number(prod.stock)!==-1 && Number(prod.stock)<qty) throw safeError('Stok produk tidak mencukupi.');
+      const requiresLogin=bool(prod.requires_login_credentials)||String(prod.category).toLowerCase().replace(/\s+/g,'')==='topup';
+      if(requiresLogin){if(!credentialSecurityReady()) throw safeError('CREDENTIAL_ENCRYPTION_KEY belum diatur untuk produk Top Up.',500);if(!validEmail(normalizeEmail(p.accountEmail))) throw safeError('Email login akun Top Up tidak valid.');const pw=String(p.accountPassword||'');if(pw.length<4||pw.length>200) throw safeError('Password login akun Top Up belum valid.');}
+      const {rows:activeBanks}=await q('SELECT * FROM banks WHERE active=TRUE ORDER BY created_at,id');
+      const methods=availablePaymentMethods(settings,activeBanks); const allowed=new Set(methods.map(x=>x.id));
+      const requested=text(p.paymentMethod,30); const userRow=await q('SELECT balance FROM users WHERE id=$1 LIMIT 1',[u.id]);
+      const voucher=await voucherQuote({code:p.voucherCode,userId:u.id,product:prod,qty}); const subtotal=Number(prod.price)*qty; const afterDiscount=Math.max(0,subtotal-Number(voucher.discount||0));
+      const balance=bool(p.useBalance)&&bool(settings.balancePaymentEnabled)?Number(userRow.rows[0]?.balance||0):0; const due=Math.max(0,afterDiscount-Math.min(balance,afterDiscount));
+      if(due>0){
+        if(!requested || !allowed.has(requested)) throw safeError('Pilih metode pembayaran yang tersedia.');
+        if(requested==='manual'&&!activeBanks.some(b=>b.id===text(p.bankId,100))) throw safeError('Pilih rekening pembayaran yang aktif.');
+        if(requested==='midtrans'&&!midtransEnabled()) throw safeError('Midtrans belum siap. Periksa Environment Variables Vercel.',500);
+      }
+      data={ready:true,productId:prod.id,quantity:qty,paymentMethod:due===0?'balance':requested};
+    }
     else if(action==='createOrder'){
       const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
       const settings=await getSettings(); if(!bool(settings.storeOpen)) throw safeError('Toko sedang menutup pesanan baru.');
@@ -238,7 +260,7 @@ export default async function handler(req,res){
         }
         if(mode==='balance') await autoFulfillOrder(order.id,'balance');
         await audit(u.email,'order_created',order.id,{productId:prod.id,subtotal:Number(order.subtotal),discount:Number(order.discount),balanceUsed:Number(order.balance_used),total:Number(order.total),mode,voucher:voucher.code});
-        await notifyAdmin('order','Pesanan baru',`${prod.name} · ${name} · Rp${Number(order.total).toLocaleString('id-ID')}`,order.id);
+        await notifyAdmin('order','Pesanan baru',`${prod.name} · ${order.name} · Rp${Number(order.total).toLocaleString('id-ID')}`,order.id);
         if(lowStockAfter&&lowStockAfter.stock<=lowStockAfter.threshold) await notifyAdmin('stock','Stok menipis',`${prod.name} tersisa ${lowStockAfter.stock}.`,prod.id);
         await sendEmail(u.email,`Pesanan ${order.id} dibuat`,`<h2>Pesanan Uply Digital dibuat</h2><p>${escapeHtml(prod.name)} · ${escapeHtml(prod.duration)}</p><p>Subtotal: <strong>Rp${Number(order.subtotal).toLocaleString('id-ID')}</strong></p>${Number(order.discount)?`<p>Diskon: -Rp${Number(order.discount).toLocaleString('id-ID')}</p>`:''}${Number(order.balance_used)?`<p>Saldo: -Rp${Number(order.balance_used).toLocaleString('id-ID')}</p>`:''}<p>Total dibayar: <strong>Rp${Number(order.total).toLocaleString('id-ID')}</strong></p><p>Status: ${mode==='balance'?'pembayaran lunas dari saldo':'menunggu pembayaran'}.</p>`);
         data={order:publicOrder((await q('SELECT * FROM orders WHERE id=$1',[order.id])).rows[0]),paymentUrl:paymentUrl||order.payment_url||'',paymentData:paymentData||order.gateway_payload||null,paymentError,duplicate:false};
@@ -463,6 +485,9 @@ export default async function handler(req,res){
 
     return send(res,200,{ok:true,data},headers);
   }catch(e){
-    console.error('UPLY API',e); return send(res,e.status||500,{ok:false,error:e.safe?e.message:'Server sedang bermasalah. Periksa konfigurasi Vercel dan database.'},headers);
+    const errorId='ERR-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
+    console.error('UPLY API',errorId,e);
+    const message=e.safe?e.message:`Server belum dapat memproses permintaan. Kode: ${errorId}`;
+    return send(res,e.status||500,{ok:false,error:message,errorId},headers);
   }
 }
