@@ -1,6 +1,6 @@
 import fs from 'fs';
 const required=[
-  'index.html','app.js','styles.css','vercel.json','package.json',
+  'index.html','app.js','styles.css','market.css','vercel.json','package.json',
   'api/uply.js','api/health.js','api/payment-webhook.js','api/product-image.js',
   'lib/db.js','lib/security.js','lib/midtrans.js','lib/payment-state.js',
   'assets/products/netflix.svg','assets/products/google-ai.svg','assets/products/youtube.svg',
