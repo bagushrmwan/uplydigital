@@ -64,3 +64,14 @@ Pengujian berikut membutuhkan environment/account milik pengguna dan tidak dapat
 7. Siklus order nyata: checkout → pembayaran → fulfilment → invoice → report.
 
 Sebelum deploy Production disarankan membuat snapshot/backup database Neon dan melakukan satu order uji bernilai kecil atau memakai metode manual terlebih dahulu.
+
+
+## V25.1 hotfix checks
+- `npm run check`: PASS
+- `npm run test:smoke`: PASS
+- Checkout scope regression check (`order.name`): PASS
+- Checkout preflight marker: PASS
+- Custom mobile quantity control marker: PASS
+- Product thumbnail fallback marker: PASS
+- SVG action icons present: PASS
+- Live Neon/Midtrans Production transaction tetap harus diuji setelah deploy karena membutuhkan credential merchant pengguna.

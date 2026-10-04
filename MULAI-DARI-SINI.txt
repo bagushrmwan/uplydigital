@@ -1,14 +1,22 @@
-UPLY DIGITAL V25 — MULAI DARI SINI
+UPLY DIGITAL V25.1 — CHECKOUT & MOBILE HOTFIX
 
-1. Backup database Neon production.
-2. Replace seluruh isi repo dengan V25.
-3. Pastikan Environment Variables lama tetap ada.
-4. Untuk multi-payment disarankan PAYMENT_MODE=hybrid.
-5. Redeploy di Vercel.
-6. Buka /api/health.
-7. Login Admin → Pembayaran & Toko.
-8. Aktifkan metode pembayaran yang ingin dipakai.
-9. Buat satu voucher test dan test checkout.
-10. Pastikan admin order dapat diproses dari mobile.
+Versi ini memperbaiki bug yang terlihat pada iPhone:
+- quantity detail produk tidak terlihat,
+- kontrol quantity checkout kurang konsisten,
+- simbol kotak pada tombol Lihat Produk,
+- thumbnail produk gagal tampil,
+- HTTP 500 setelah Lanjut ke Pembayaran.
 
-Database lama tidak perlu di-reset. V25 menambah tabel/kolom secara non-destructive.
+PENTING: penyebab utama HTTP 500 ditemukan di backend V25. Order sebenarnya sudah berhasil disimpan, lalu server error ketika membuat notifikasi admin karena memakai variabel `name` di luar scope. V25.1 sudah memperbaikinya menggunakan `order.name`.
+
+UPDATE:
+1. Backup Neon.
+2. Replace seluruh isi repo dengan file V25.1.
+3. Deploy Vercel.
+4. Buka /api/health.
+5. Pastikan version = 25.1 dan checkoutSchemaReady = true.
+6. Hard refresh Safari/Chrome.
+7. Cek menu Pesanan dan batalkan order pending duplikat dari percobaan V25 lama bila ada.
+8. Buat satu order baru untuk test.
+
+Database lama tetap digunakan. Tidak perlu reset Neon.

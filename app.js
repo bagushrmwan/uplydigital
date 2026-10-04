@@ -146,8 +146,20 @@ async function restore(){
   catch { state.token=''; state.user=null; localStorage.removeItem('uply_token'); }
 }
 
-function icon(p){ return `<span class="mark">${({netflix:'N',youtube:'▶',ai:'✦',stars:'★'}[p.icon] || 'U')}</span>`; }
-function productThumb(p,cls='product-thumb-img'){ const src=esc(p.thumbnail||p.productThumbnail||'/assets/products/default.svg'); return `<img class="${cls}" src="${src}" alt="${esc(p.name||p.productName||'Produk Uply Digital')}" loading="lazy">`; }
+function icon(p){ return `<span class="mark">${({netflix:'N',youtube:'▶',ai:'AI',stars:'★'}[p.icon] || 'U')}</span>`; }
+function defaultThumbFor(p){
+  const id=String(p?.id||p?.productId||'').toLowerCase(); const name=String(p?.name||p?.productName||'').toLowerCase();
+  if(id.includes('netflix')||name.includes('netflix')) return '/assets/products/netflix.svg';
+  if(id.includes('google')||name.includes('google')||name.includes('gemini')) return '/assets/products/google-ai.svg';
+  if(id.includes('youtube')||name.includes('youtube')) return '/assets/products/youtube.svg';
+  if(id.includes('imei')||name.includes('imei')) return '/assets/products/imei.svg';
+  if(id.includes('stars-19200')||name.includes('19.200')) return '/assets/products/stars-19200.svg';
+  if(id.includes('stars-12800')||name.includes('12.800')) return '/assets/products/stars-12800.svg';
+  if(id.includes('stars')||name.includes('facebook stars')) return '/assets/products/stars-6400.svg';
+  return '/assets/products/default.svg';
+}
+function productThumb(p,cls='product-thumb-img'){ const fallback=defaultThumbFor(p); const src=esc(p.thumbnail||p.productThumbnail||fallback); return `<img class="${cls}" src="${src}" data-product-thumb data-fallback="${esc(fallback)}" alt="${esc(p.name||p.productName||'Produk Uply Digital')}" loading="lazy">`; }
+document.addEventListener('error',e=>{ const img=e.target; if(!(img instanceof HTMLImageElement)||!img.matches('[data-product-thumb]')) return; const fallback=img.dataset.fallback||'/assets/products/default.svg'; if(img.dataset.fallbackTried==='1'){ if(!img.src.endsWith('/assets/products/default.svg')) img.src='/assets/products/default.svg'; return; } img.dataset.fallbackTried='1'; img.src=fallback; },true);
 function status(s){ return `<span class="status ${esc(s)}">${esc(statusLabel[s] || s)}</span>`; }
 function inventoryStatus(s){ return `<span class="status inv-${esc(s)}">${esc(inventoryStatusLabel[s] || s)}</span>`; }
 
@@ -353,9 +365,8 @@ function checkoutPage(id){
   const methods=(state.catalog.paymentMethods||[]).filter(m=>m.id!=='balance');
   const maxQty = p.stock > 0 ? Math.max(1, Math.min(5, Number(p.stock))) : 5;
   const initialQty=Math.max(1,Math.min(maxQty,Number(state.checkoutQty||1)));
-  const qtyOptions = Array.from({length:maxQty},(_,i)=>i+1).map(n=>`<option value="${n}" ${n===initialQty?'selected':''}>${n}</option>`).join('');
   const firstMethod=methods[0]?.id||'';
-  const payCards=methods.map((m,i)=>`<label class="payment-option smart-pay-card"><input type="radio" name="paymentMethod" value="${esc(m.id)}" ${i===0?'checked':''}><span><b>${m.id==='midtrans'?'⚡ ':m.id==='qris_manual'?'▣ ':'🏦 '}${esc(m.label)}</b><small>${m.id==='midtrans'?'Otomatis: status dibaca dari gateway dan webhook.':m.id==='qris_manual'?'Scan QRIS toko lalu upload bukti pembayaran.':'Transfer ke rekening toko lalu upload bukti.'}</small></span><em>${m.id==='midtrans'?'Otomatis':'Manual'}</em></label>`).join('');
+  const payCards=methods.map((m,i)=>`<label class="payment-option smart-pay-card"><input type="radio" name="paymentMethod" value="${esc(m.id)}" ${i===0?'checked':''}><span><b><i class="pay-mark ${esc(m.id)}">${m.id==='midtrans'?'M':m.id==='qris_manual'?'QR':'B'}</i>${esc(m.label)}</b><small>${m.id==='midtrans'?'Otomatis: status dibaca dari gateway dan webhook.':m.id==='qris_manual'?'Scan QRIS toko lalu upload bukti pembayaran.':'Transfer ke rekening toko lalu upload bukti.'}</small></span><em>${m.id==='midtrans'?'Otomatis':'Manual'}</em></label>`).join('');
   const bankBlock=state.catalog.banks?.length?`<div class="payment-subpanel" data-pay-panel="manual" ${firstMethod!=='manual'?'hidden':''}><small>Pilih rekening tujuan</small>${state.catalog.banks.map((b,i)=>`<label class="payment-option"><input type="radio" name="bankId" value="${esc(b.id)}" ${i===0?'checked':''}><span><b>${esc(b.name)}</b><small>${esc(b.number)} · ${esc(b.holder)}</small></span></label>`).join('')}</div>`:'';
   const qrisBlock=`<div class="payment-subpanel qris-checkout-box" data-pay-panel="qris_manual" ${firstMethod!=='qris_manual'?'hidden':''}><img src="/api/qris-image?v=${Date.now()}" alt="QRIS Uply Digital"><div><strong>${esc(state.catalog.settings.qrisName||'QRIS Manual')}</strong><small>Bayar sesuai nominal yang tertera lalu upload bukti dari detail pesanan.</small></div></div>`;
   const subtotal=Number(p.price)*initialQty, discount=state.appliedVoucher?.discount||0;
@@ -369,7 +380,7 @@ function checkoutPage(id){
 ${p.requiresLoginCredentials?`<section class="checkout-section panel credential-section"><div class="section-label">LOGIN AKUN UNTUK PROSES TOP UP</div><div class="credential-notice"><strong>Proses manual oleh admin</strong><p>Masukkan email dan password akun tujuan. Data disimpan terenkripsi dan dihapus otomatis setelah pesanan selesai/dibatalkan.</p><b>Jangan masukkan OTP, recovery code, PIN keamanan, atau kode 2FA.</b></div><label class="field">Email login akun<input name="accountEmail" type="email" autocomplete="off" required placeholder="email akun tujuan"></label><label class="field">Password akun<input name="accountPassword" type="password" autocomplete="new-password" required minlength="4" maxlength="200" placeholder="Password akun tujuan"></label></section>`:''}
         <section class="checkout-section panel"><div class="section-label">KONTAK</div><div class="row"><label class="field">Nama Lengkap<input name="name" required minlength="2" maxlength="80" value="${esc(state.user.name)}"></label><label class="field">Email<input value="${esc(state.user.email)}" readonly><small>Email dari akun Uply Digital.</small></label></div><label class="field">WhatsApp<input name="phone" type="tel" maxlength="24" placeholder="Contoh: 081234567890"><small>Wajib jika detail dikirim melalui WhatsApp.</small></label><label class="field">Kirim detail melalui<select name="channel" id="checkoutChannel"><option value="email">Email</option><option value="whatsapp">WhatsApp</option></select></label><label class="field">Catatan untuk admin <small>Opsional</small><textarea name="customerNote" maxlength="800" placeholder="Contoh: mohon proses untuk region Indonesia atau informasi tambahan lainnya."></textarea></label></section>
       </div>
-      <aside class="panel checkout-summary-card"><div class="section-label">RINGKASAN PESANAN</div><div class="summary-product"><div class="summary-cover thumb-summary">${productThumb(p,'summary-thumb')}</div><div><strong>${esc(p.name)}</strong><span>${esc(p.duration)}</span></div></div><label class="field">Jumlah<select name="quantity" id="checkoutQuantity">${qtyOptions}</select></label><div class="summary-row"><span>Subtotal</span><strong id="checkoutSubtotal">${money(subtotal)}</strong></div><div class="summary-row discount-row" id="checkoutDiscountRow" ${discount?'':'hidden'}><span>Voucher</span><strong id="checkoutDiscount">-${money(discount)}</strong></div><div class="summary-row" id="checkoutBalanceRow" hidden><span>Saldo Uply</span><strong id="checkoutBalanceUsed">-Rp0</strong></div><div class="summary-row total"><span>Total pembayaran</span><strong id="checkoutTotal">${money(Math.max(0,subtotal-discount))}</strong></div><label class="check"><input type="checkbox" name="agree" required> Saya sudah memeriksa detail kontak dan menyetujui ketentuan produk.</label><div id="checkoutError" class="form-inline-error" hidden></div><button class="btn full checkout-submit" type="submit" ${!externalReady?'disabled':''}>Lanjut ke Pembayaran →</button><p class="tiny center">Diskon dan saldo dihitung ulang oleh server sebelum order dibuat.</p></aside>
+      <aside class="panel checkout-summary-card"><div class="section-label">RINGKASAN PESANAN</div><div class="summary-product"><div class="summary-cover thumb-summary">${productThumb(p,'summary-thumb')}</div><div><strong>${esc(p.name)}</strong><span>${esc(p.duration)}</span></div></div><label class="field checkout-quantity-field">Jumlah<div class="checkout-qty-stepper"><button type="button" data-checkout-minus aria-label="Kurangi jumlah">−</button><input name="quantity" id="checkoutQuantity" type="number" min="1" max="${maxQty}" value="${initialQty}" readonly inputmode="numeric" aria-label="Jumlah produk"><button type="button" data-checkout-plus data-max="${maxQty}" aria-label="Tambah jumlah">+</button></div><small>Maksimal ${maxQty} item untuk produk ini.</small></label><div class="summary-row"><span>Subtotal</span><strong id="checkoutSubtotal">${money(subtotal)}</strong></div><div class="summary-row discount-row" id="checkoutDiscountRow" ${discount?'':'hidden'}><span>Voucher</span><strong id="checkoutDiscount">-${money(discount)}</strong></div><div class="summary-row" id="checkoutBalanceRow" hidden><span>Saldo Uply</span><strong id="checkoutBalanceUsed">-Rp0</strong></div><div class="summary-row total"><span>Total pembayaran</span><strong id="checkoutTotal">${money(Math.max(0,subtotal-discount))}</strong></div><label class="check"><input type="checkbox" name="agree" required> Saya sudah memeriksa detail kontak dan menyetujui ketentuan produk.</label><div id="checkoutError" class="form-inline-error" hidden></div><button class="btn full checkout-submit" type="submit" ${!externalReady?'disabled':''}>Lanjut ke Pembayaran →</button><p class="tiny center">Diskon dan saldo dihitung ulang oleh server sebelum order dibuat.</p></aside>
     </form>
   </div></section>`;
 }
@@ -387,6 +398,13 @@ function checkoutRecalc(){
   if($('#checkoutBalanceUsed')) $('#checkoutBalanceUsed').textContent='-'+money(balanceUsed);
   if($('#checkoutTotal')) $('#checkoutTotal').textContent=money(total);
   const submit=form.querySelector('.checkout-submit'); const external=!!form.querySelector('input[name="paymentMethod"]:checked'); if(submit) submit.disabled=total>0&&!external;
+}
+
+function setCheckoutQty(next){
+  const form=$('#checkoutForm'); const input=$('#checkoutQuantity'); if(!form||!input) return;
+  const max=Math.max(1,Number(input.max)||5); const qty=Math.max(1,Math.min(max,Number(next)||1));
+  if(state.appliedVoucher && Number(state.appliedVoucher.qty)!==qty){state.appliedVoucher=null;const h=$('#voucherHint');if(h)h.textContent='Jumlah berubah. Terapkan voucher kembali.';}
+  input.value=String(qty); state.checkoutQty=qty; checkoutRecalc();
 }
 
 function togglePaymentPanels(){
@@ -733,6 +751,8 @@ document.addEventListener('click', async e => {
   if(e.target.closest('[data-cart-remove]')){state.cart=null;state.appliedVoucher=null;saveCart();return;}
   if(e.target.closest('[data-cart-minus]')){if(state.cart){state.cart.qty=Math.max(1,Number(state.cart.qty||1)-1);state.appliedVoucher=null;saveCart();}return;}
   if(e.target.closest('[data-cart-plus]')){const p=cartProduct();if(state.cart&&p){const max=p.stock>0?Math.min(5,Number(p.stock)):5;state.cart.qty=Math.min(max,Number(state.cart.qty||1)+1);state.appliedVoucher=null;saveCart();}return;}
+  if(e.target.closest('[data-checkout-minus]')){const input=$('#checkoutQuantity');if(input)setCheckoutQty(Number(input.value||1)-1);return;}
+  if(e.target.closest('[data-checkout-plus]')){const input=$('#checkoutQuantity');if(input)setCheckoutQty(Number(input.value||1)+1);return;}
   if(e.target.closest('[data-cart-checkout]')){const p=cartProduct();if(!p)return;state.checkoutQty=Number(state.cart.qty)||1;state.pendingCheckout=p.id;closeCart();if(!state.user||state.user.role!=='user'){openModal('Masuk untuk checkout',loginForm(false));return;}state.pendingCheckout='';location.hash='#checkout/'+encodeURIComponent(p.id);return;}
   if(e.target.closest('[data-mobile-menu]')){ const account=state.user?(state.user.role==='admin'?'<a class="market-menu-link primary" href="#admin" data-close>Panel Admin</a>':'<a class="market-menu-link primary" href="#dashboard" data-close>'+esc(state.user.name)+'</a>'):'<button class="market-menu-link primary" type="button" data-open-login>Masuk / Daftar</button>'; openModal('Menu',`<div class="koala-menu-sheet"><nav class="market-mobile-menu"><a href="#katalog" data-close>Beranda</a><button type="button" data-scroll-products data-close>Produk</button><a href="#bantuan" data-close>Ketentuan & Garansi</a><a href="#pesanan" data-close>Cek Status Pesanan</a><a href="#bantuan" data-close>Metode Pembayaran</a><a href="#bantuan" data-close>Tentang Kami</a><a href="#bantuan" data-close>Blog & Artikel</a>${account}</nav><div class="koala-menu-footer"><small>Follow Us</small><div><span>◎</span><span>◉</span><span>◌</span><span>◆</span></div><p>© ${new Date().getFullYear()} Uply Digital. Semua hak dilindungi.</p></div></div>`); return; }
   if(e.target.closest('[data-support-open]')){const wa=String(state.catalog?.settings?.whatsapp||'').replace(/\D/g,'');openModal('Bantuan Uply Digital',`<div class="support-modal"><p>Butuh bantuan memilih produk atau memeriksa pesanan?</p><div class="stack">${wa?`<a class="btn full" href="https://wa.me/${esc(wa)}" target="_blank" rel="noopener">Chat WhatsApp Admin</a>`:''}<a class="btn light full" href="#bantuan" data-close>Pusat Bantuan</a><a class="btn light full" href="#pesanan" data-close>Cek Pesanan Saya</a></div></div>`);return;}
@@ -805,8 +825,12 @@ document.addEventListener('submit', async e => {
     } else if(f.id==='checkoutForm'){
       if(!fd.has('agree')) throw Error('Centang persetujuan ketentuan produk terlebih dahulu.');
       if(g('channel')==='whatsapp' && !g('phone').trim()) throw Error('Isi nomor WhatsApp jika detail ingin dikirim lewat WhatsApp.');
-      const req=(crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2));
-      const r=await api('createOrder',{productId:f.dataset.productId,requestId:req,quantity:Number(g('quantity')),name:g('name'),phone:g('phone'),channel:g('channel'),bankId:g('bankId'),customerNote:g('customerNote'),accountEmail:g('accountEmail'),accountPassword:g('accountPassword'),paymentMethod:g('paymentMethod'),paymentChannel:g('paymentChannel'),voucherCode:g('voucherCode')||state.appliedVoucher?.code||'',useBalance:fd.has('useBalance'),agree:true});
+      const requestPayload={productId:f.dataset.productId,quantity:Number(g('quantity')),name:g('name'),phone:g('phone'),channel:g('channel'),bankId:g('bankId'),customerNote:g('customerNote'),accountEmail:g('accountEmail'),accountPassword:g('accountPassword'),paymentMethod:g('paymentMethod'),paymentChannel:g('paymentChannel'),voucherCode:g('voucherCode')||state.appliedVoucher?.code||'',useBalance:fd.has('useBalance'),agree:true};
+      await api('checkoutPreflight',requestPayload);
+      const req=f.dataset.requestId||(crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2));
+      f.dataset.requestId=req;
+      const r=await api('createOrder',{...requestPayload,requestId:req});
+      delete f.dataset.requestId;
       state.orders=await api('orders'); state.user=await api('me'); setAccount();
       state.checkoutQty=1;state.appliedVoucher=null;if(state.cart?.productId===f.dataset.productId){state.cart=null;saveCart();}
       if(r.paymentUrl){msg('Pesanan dibuat. Membuka pembayaran…');setTimeout(()=>location.assign(r.paymentUrl),650)}
@@ -848,7 +872,11 @@ document.addEventListener('submit', async e => {
     } else if(f.id==='orderForm'){
       await api('updateOrder',{orderId:f.dataset.id,status:g('status'),delivery:g('delivery'),note:g('note'),confirmPayment:fd.has('confirmPayment')});closeModal();await refreshAdmin();msg('Pesanan diperbarui.');
     }
-  } catch(err){ msg(err.message); }
+  } catch(err){
+    const inline=f.id==='checkoutForm'?$('#checkoutError'):null;
+    if(inline){inline.hidden=false;inline.textContent=err.message||'Checkout belum berhasil.';inline.scrollIntoView({behavior:'smooth',block:'center'});}
+    msg(err.message);
+  }
   finally { if(b){ b.disabled=false; b.textContent=b.dataset.old || 'Simpan'; } }
 });
 
