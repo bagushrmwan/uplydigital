@@ -12,16 +12,32 @@ function phone(v,required=false){
   let p=text(v,24).replace(/[\s()+-]/g,''); if(p.startsWith('0')) p='62'+p.slice(1);
   if(!p&&!required) return ''; if(!/^[1-9]\d{8,14}$/.test(p)) throw safeError('Nomor WhatsApp tidak valid.'); return p;
 }
-function publicProduct(r,availableInventory){
+function publicVariant(v,availableInventory=0,fulfillmentMode='manual'){
+  const stock=fulfillmentMode==='inventory'?Number(availableInventory||0):Number(v.stock);
+  const compareAt=Number(v.compare_at_price||0);
+  const price=Number(v.price||0);
+  const discountPercent=compareAt>price&&compareAt>0?Math.round((compareAt-price)/compareAt*100):0;
+  return {id:v.id,productId:v.product_id,name:v.name,subtitle:v.subtitle||'',price,compareAtPrice:compareAt,stock,active:!!v.active,badge:v.badge||'',sortOrder:Number(v.sort_order||0),discountPercent};
+}
+function publicProduct(r,availableInventory,variants=[]){
   const uploaded=!!r.thumbnail_data;
   const thumbnail=uploaded?`/api/product-image?id=${encodeURIComponent(r.id)}&v=${encodeURIComponent(new Date(r.updated_at||Date.now()).getTime())}`:(r.thumbnail_url||'');
-  return {id:r.id,name:r.name,category:r.category,duration:r.duration,price:Number(r.price),description:r.description,benefits:Array.isArray(r.benefits)?r.benefits:[],terms:r.terms,stock:r.fulfillment_mode==='inventory'?availableInventory:Number(r.stock),active:r.active,badge:r.badge,icon:r.icon,fulfillmentMode:r.fulfillment_mode,thumbnail,hasUploadedThumbnail:uploaded,featured:!!r.featured,requiresLoginCredentials:!!r.requires_login_credentials,soldCount:Number(r.sold_count||0),bestSeller:!!r.best_seller,lowStockThreshold:Number(r.low_stock_threshold||3)};
+  const activeVariants=(variants||[]).filter(v=>v.active!==false);
+  const variantPrices=activeVariants.map(v=>Number(v.price)).filter(Number.isFinite);
+  const hasVariants=activeVariants.length>0;
+  let price=Number(r.price),stock=r.fulfillment_mode==='inventory'?Number(availableInventory):Number(r.stock);
+  if(hasVariants){
+    price=Math.min(...variantPrices);
+    const stocks=activeVariants.map(v=>Number(v.stock));
+    stock=stocks.includes(-1)?-1:stocks.reduce((a,b)=>a+Math.max(0,b),0);
+  }
+  return {id:r.id,name:r.name,category:r.category,duration:r.duration,price,priceMin:hasVariants?Math.min(...variantPrices):price,priceMax:hasVariants?Math.max(...variantPrices):price,hasVariants,variants:activeVariants,description:r.description,benefits:Array.isArray(r.benefits)?r.benefits:[],terms:r.terms,stock,active:r.active,badge:r.badge,icon:r.icon,fulfillmentMode:r.fulfillment_mode,thumbnail,hasUploadedThumbnail:uploaded,featured:!!r.featured,requiresLoginCredentials:!!r.requires_login_credentials,soldCount:Number(r.sold_count||0),bestSeller:!!r.best_seller,lowStockThreshold:Number(r.low_stock_threshold||3)};
 }
 function publicOrder(o,admin=false){
   const gp=o.gateway_payload&&typeof o.gateway_payload==='object'?o.gateway_payload:{};
   const va=Array.isArray(gp.va_numbers)&&gp.va_numbers[0]?gp.va_numbers[0]:{};
   const paymentData={method:o.gateway_payment_method||gp.payment_type||'',channel:o.gateway_payment_channel||gp.bank||va.bank||'',transactionId:o.gateway_transaction_id||gp.transaction_id||'',snapToken:gp.token||'',qrUrl:'',qrContent:'',vaNumber:gp.permata_va_number||va.va_number||'',paymentCode:gp.payment_code||'',billKey:gp.bill_key||'',billerCode:gp.biller_code||'',paymentUrl:o.payment_url||gp.redirect_url||gp.finish_redirect_url||'',expiredAt:null,fee:0,feeBearer:'',amount:Number(gp.gross_amount||o.total||0)};
-  return {id:o.id,userId:admin?o.user_id:undefined,email:o.email,name:o.name,phone:o.phone,channel:o.channel,productId:o.product_id,productName:o.product_name,productThumbnail:o.product_thumbnail||'',duration:o.duration,quantity:Number(o.quantity),price:Number(o.price),subtotal:Number(o.subtotal||Number(o.price)*Number(o.quantity)),discount:Number(o.discount||0),voucherCode:o.voucher_code||'',balanceUsed:Number(o.balance_used||0),total:Number(o.total),status:o.status,paymentMode:o.payment_mode,gatewayStatus:o.gateway_status,paymentUrl:o.payment_url, paymentData,createdAt:o.created_at,expiresAt:o.expires_at,updatedAt:o.updated_at,paymentSubmittedAt:o.payment_submitted_at,paymentVerifiedAt:o.payment_verified_at,processingAt:o.processing_at,completedAt:o.completed_at,hasProof:!!o.proof_name,proofName:o.proof_name,delivery:o.delivery,note:o.note,hasCredentials:admin?!!o.credentials_enc:undefined,credentialsStatus:admin?(o.credentials_status||''):undefined,credentialsViewedAt:admin?o.credentials_viewed_at:undefined,bank:o.bank_id?{id:o.bank_id,name:o.bank_name,number:o.bank_number,holder:o.bank_holder}:null};
+  return {id:o.id,userId:admin?o.user_id:undefined,email:o.email,name:o.name,phone:o.phone,channel:o.channel,productId:o.product_id,productName:o.product_name,productThumbnail:o.product_thumbnail||'',variantId:o.variant_id||'',variantName:o.variant_name||'',variantSubtitle:o.variant_subtitle||'',duration:o.duration,quantity:Number(o.quantity),price:Number(o.price),subtotal:Number(o.subtotal||Number(o.price)*Number(o.quantity)),discount:Number(o.discount||0),voucherCode:o.voucher_code||'',balanceUsed:Number(o.balance_used||0),total:Number(o.total),status:o.status,paymentMode:o.payment_mode,gatewayStatus:o.gateway_status,paymentUrl:o.payment_url, paymentData,createdAt:o.created_at,expiresAt:o.expires_at,updatedAt:o.updated_at,paymentSubmittedAt:o.payment_submitted_at,paymentVerifiedAt:o.payment_verified_at,processingAt:o.processing_at,completedAt:o.completed_at,hasProof:!!o.proof_name,proofName:o.proof_name,delivery:o.delivery,note:o.note,hasCredentials:admin?!!o.credentials_enc:undefined,credentialsStatus:admin?(o.credentials_status||''):undefined,credentialsViewedAt:admin?o.credentials_viewed_at:undefined,bank:o.bank_id?{id:o.bank_id,name:o.bank_name,number:o.bank_number,holder:o.bank_holder}:null};
 }
 function originHeaders(req){
   const origin=String(req.headers.origin||''); const allowed=process.env.ALLOWED_ORIGIN||process.env.SITE_URL||'';
@@ -34,9 +50,12 @@ async function expireOldOrders(){
   const client=await pool.connect();
   try{
     await client.query('BEGIN');
-    const {rows:expired}=await client.query(`SELECT id,user_id,product_id,quantity,stock_reserved,balance_used,voucher_code,credit_refunded FROM orders WHERE status='pending_payment' AND expires_at<NOW() FOR UPDATE`);
+    const {rows:expired}=await client.query(`SELECT id,user_id,product_id,variant_id,quantity,stock_reserved,balance_used,voucher_code,credit_refunded FROM orders WHERE status='pending_payment' AND expires_at<NOW() FOR UPDATE`);
     for(const o of expired){
-      if(o.stock_reserved) await client.query('UPDATE products SET stock=stock+$2,updated_at=NOW() WHERE id=$1 AND stock<>-1',[o.product_id,o.quantity]);
+      if(o.stock_reserved){
+        if(o.variant_id) await client.query('UPDATE product_variants SET stock=stock+$2,updated_at=NOW() WHERE id=$1 AND stock<>-1',[o.variant_id,o.quantity]);
+        else await client.query('UPDATE products SET stock=stock+$2,updated_at=NOW() WHERE id=$1 AND stock<>-1',[o.product_id,o.quantity]);
+      }
       if(!o.credit_refunded){
         const amount=Number(o.balance_used||0);
         if(amount>0){await client.query('UPDATE users SET balance=balance+$2,updated_at=NOW() WHERE id=$1',[o.user_id,amount]);await client.query(`INSERT INTO balance_ledger(user_id,amount,type,reference,note,actor) VALUES($1,$2,'refund',$3,'Refund otomatis order kedaluwarsa','system')`,[o.user_id,amount,o.id]);}
@@ -49,22 +68,47 @@ async function expireOldOrders(){
   }catch(e){await client.query('ROLLBACK');throw e;}finally{await client.release();}
 }
 async function catalog(){
-  const [pr,ir,br,s,sales]=await Promise.all([
+  const [pr,vr,ir,br,s,sales]=await Promise.all([
     q(`SELECT p.*,COALESCE(sc.sold_count,0)::int AS sold_count FROM products p LEFT JOIN (SELECT product_id,COUNT(*)::int AS sold_count FROM orders WHERE status='completed' GROUP BY product_id) sc ON sc.product_id=p.id WHERE p.active=TRUE ORDER BY p.featured DESC,p.created_at,p.id`),
-    q(`SELECT product_id,COUNT(*)::int AS available FROM inventory WHERE status='available' GROUP BY product_id`),
+    q(`SELECT * FROM product_variants WHERE active=TRUE ORDER BY product_id,sort_order,created_at,id`),
+    q(`SELECT product_id,variant_id,COUNT(*)::int AS available FROM inventory WHERE status='available' GROUP BY product_id,variant_id`),
     q('SELECT id,name,number,holder,active FROM banks WHERE active=TRUE ORDER BY created_at,id'),
     getSettings(),
     q(`SELECT product_id,COUNT(*)::int AS n FROM orders WHERE status='completed' GROUP BY product_id ORDER BY n DESC LIMIT 3`)
   ]);
-  const inv=Object.fromEntries(ir.rows.map(x=>[x.product_id,Number(x.available)]));
+  const invProduct={}; const invVariant={};
+  for(const x of ir.rows){const n=Number(x.available);invProduct[x.product_id]=(invProduct[x.product_id]||0)+n;if(x.variant_id)invVariant[x.variant_id]=n;}
+  const variantsByProduct={};
+  for(const v of vr.rows){const pv=publicVariant(v,invVariant[v.id]||0,(pr.rows.find(p=>p.id===v.product_id)||{}).fulfillment_mode||'manual');(variantsByProduct[v.product_id]??=[]).push(pv);}
   const best=new Set(sales.rows.filter(x=>Number(x.n)>0).map(x=>x.product_id));
-  const products=pr.rows.map(p=>publicProduct({...p,best_seller:best.has(p.id)},inv[p.id]||0));
+  const products=pr.rows.map(p=>publicProduct({...p,best_seller:best.has(p.id)},invProduct[p.id]||0,variantsByProduct[p.id]||[]));
   const methods=availablePaymentMethods(s,br.rows);
   const cfg=configuredPaymentMode();
   return {products,banks:br.rows,paymentMethods:methods,settings:{storeName:s.storeName||'Uply Digital',whatsapp:s.whatsapp||'',hours:s.hours||'',storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,notice:s.notice||'',promoBanner:s.promoBanner||'',paymentMode:cfg,paymentReady:methods.some(m=>m.id!=='balance'),paymentProvider:methods.map(m=>m.label).join(' · '),manualPaymentEnabled:bool(s.manualPaymentEnabled),midtransPaymentEnabled:bool(s.midtransPaymentEnabled),balancePaymentEnabled:bool(s.balancePaymentEnabled),qrisManualReady:!!s.qrisImageData,qrisName:s.qrisName||'QRIS Manual'}};
 }
 async function getUserById(userId){ const {rows}=await q(`SELECT u.id,u.email,u.name,u.phone,u.balance,u.membership_tier,u.membership_manual,u.created_at,COUNT(o.id) FILTER (WHERE o.status='completed')::int AS completed_count,COALESCE(SUM(CASE WHEN o.status='completed' THEN COALESCE(NULLIF(o.subtotal,0),o.price*o.quantity)-o.discount ELSE 0 END),0)::bigint AS spent FROM users u LEFT JOIN orders o ON o.user_id=u.id WHERE u.id=$1 GROUP BY u.id LIMIT 1`,[userId]); const u=rows[0]; if(!u)return u; const settings=await getSettings(); const autoEnabled=bool(settings.autoRoleEnabled); const tier=(u.membership_manual||!autoEnabled)?(u.membership_tier||'customer'):tierFromStats(u.completed_count,u.spent); return {...u,balance:Number(u.balance||0),membershipTier:tier,membershipManual:!!u.membership_manual,completedCount:Number(u.completed_count||0),spent:Number(u.spent||0)}; }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+async function resolveVariant({db,product,variantId='',qty=1,lock=false}){
+  const suffix=lock?' FOR UPDATE':'';
+  const all=await db.query(`SELECT * FROM product_variants WHERE product_id=$1 AND active=TRUE ORDER BY sort_order,created_at,id${suffix}`,[product.id]);
+  if(!all.rows.length){
+    if(product.fulfillment_mode==='inventory'){
+      const c=await db.query(`SELECT COUNT(*)::int AS n FROM inventory WHERE product_id=$1 AND variant_id='' AND status='available'`,[product.id]);
+      if(Number(c.rows[0]?.n||0)<qty) throw safeError('Stok inventory otomatis tidak mencukupi.');
+    }else if(Number(product.stock)!==-1 && Number(product.stock)<qty) throw safeError('Stok produk tidak mencukupi.');
+    return null;
+  }
+  const vid=text(variantId,100);
+  if(!vid) throw safeError('Pilih varian produk terlebih dahulu.');
+  const variant=all.rows.find(v=>v.id===vid);
+  if(!variant) throw safeError('Varian produk tidak tersedia. Silakan pilih varian lain.');
+  if(product.fulfillment_mode==='inventory'){
+    const c=await db.query(`SELECT COUNT(*)::int AS n FROM inventory WHERE product_id=$1 AND variant_id=$2 AND status='available'`,[product.id,variant.id]);
+    if(Number(c.rows[0]?.n||0)<qty) throw safeError('Stok varian inventory tidak mencukupi.');
+  }else if(Number(variant.stock)!==-1 && Number(variant.stock)<qty) throw safeError('Stok varian tidak mencukupi.');
+  return variant;
+}
 
 async function voucherQuote({code,userId,product,qty,client=null}){
   const db=client||{query:(t,p)=>q(t,p)}; const c=text(code,40).toUpperCase();
@@ -183,22 +227,21 @@ export default async function handler(req,res){
       const settings=await getSettings(); if(!bool(settings.storeOpen)) throw safeError('Toko sedang menutup pesanan baru.');
       const qty=Number(p.quantity); if(!Number.isInteger(qty)||qty<1||qty>5) throw safeError('Jumlah produk harus 1–5.');
       const {rows}=await q('SELECT * FROM products WHERE id=$1 AND active=TRUE LIMIT 1',[text(p.productId,100)]); const prod=rows[0]; if(!prod) throw safeError('Produk tidak tersedia.');
-      if(prod.fulfillment_mode==='inventory'){
-        const c=await q(`SELECT COUNT(*)::int AS n FROM inventory WHERE product_id=$1 AND status='available'`,[prod.id]); if(Number(c.rows[0]?.n||0)<qty) throw safeError('Stok inventory otomatis tidak mencukupi.');
-      } else if(Number(prod.stock)!==-1 && Number(prod.stock)<qty) throw safeError('Stok produk tidak mencukupi.');
+      const variant=await resolveVariant({db:{query:(t,pa)=>q(t,pa)},product:prod,variantId:p.variantId,qty});
+      const pricedProduct=variant?{...prod,price:Number(variant.price)}:prod;
       const requiresLogin=bool(prod.requires_login_credentials)||String(prod.category).toLowerCase().replace(/\s+/g,'')==='topup';
       if(requiresLogin){if(!credentialSecurityReady()) throw safeError('CREDENTIAL_ENCRYPTION_KEY belum diatur untuk produk Top Up.',500);if(!validEmail(normalizeEmail(p.accountEmail))) throw safeError('Email login akun Top Up tidak valid.');const pw=String(p.accountPassword||'');if(pw.length<4||pw.length>200) throw safeError('Password login akun Top Up belum valid.');}
       const {rows:activeBanks}=await q('SELECT * FROM banks WHERE active=TRUE ORDER BY created_at,id');
       const methods=availablePaymentMethods(settings,activeBanks); const allowed=new Set(methods.map(x=>x.id));
       const requested=text(p.paymentMethod,30); const userRow=await q('SELECT balance FROM users WHERE id=$1 LIMIT 1',[u.id]);
-      const voucher=await voucherQuote({code:p.voucherCode,userId:u.id,product:prod,qty}); const subtotal=Number(prod.price)*qty; const afterDiscount=Math.max(0,subtotal-Number(voucher.discount||0));
+      const voucher=await voucherQuote({code:p.voucherCode,userId:u.id,product:pricedProduct,qty}); const subtotal=Number(pricedProduct.price)*qty; const afterDiscount=Math.max(0,subtotal-Number(voucher.discount||0));
       const balance=bool(p.useBalance)&&bool(settings.balancePaymentEnabled)?Number(userRow.rows[0]?.balance||0):0; const due=Math.max(0,afterDiscount-Math.min(balance,afterDiscount));
       if(due>0){
         if(!requested || !allowed.has(requested)) throw safeError('Pilih metode pembayaran yang tersedia.');
         if(requested==='manual'&&!activeBanks.some(b=>b.id===text(p.bankId,100))) throw safeError('Pilih rekening pembayaran yang aktif.');
         if(requested==='midtrans'&&!midtransEnabled()) throw safeError('Midtrans belum siap. Periksa Environment Variables Vercel.',500);
       }
-      data={ready:true,productId:prod.id,quantity:qty,paymentMethod:due===0?'balance':requested};
+      data={ready:true,productId:prod.id,variantId:variant?.id||'',quantity:qty,paymentMethod:due===0?'balance':requested};
     }
     else if(action==='createOrder'){
       const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
@@ -209,14 +252,12 @@ export default async function handler(req,res){
       if(existing.rowCount){data={order:publicOrder(existing.rows[0]),paymentUrl:existing.rows[0].payment_url||'',paymentData:existing.rows[0].gateway_payload||null,duplicate:true};}
       else {
         const qty=Number(p.quantity); if(!Number.isInteger(qty)||qty<1||qty>5) throw safeError('Jumlah produk harus 1–5.');
-        const client=await pool.connect(); let order=null,prod=null,mode='manual',voucher={code:'',discount:0}; let lowStockAfter=null;
+        const client=await pool.connect(); let order=null,prod=null,variant=null,pricedProduct=null,mode='manual',voucher={code:'',discount:0}; let lowStockAfter=null;
         try{
           await client.query('BEGIN');
           const {rows:prs}=await client.query('SELECT * FROM products WHERE id=$1 AND active=TRUE LIMIT 1 FOR UPDATE',[text(p.productId,100)]); prod=prs[0]; if(!prod) throw safeError('Produk tidak tersedia.');
-          if(prod.fulfillment_mode==='inventory'){
-            const c=await client.query(`SELECT COUNT(*)::int AS n FROM inventory WHERE product_id=$1 AND status='available'`,[prod.id]);
-            if(Number(c.rows[0].n)<qty) throw safeError('Stok inventory otomatis tidak mencukupi.');
-          } else if(Number(prod.stock)!==-1 && Number(prod.stock)<qty) throw safeError('Stok produk tidak mencukupi.');
+          variant=await resolveVariant({db:client,product:prod,variantId:p.variantId,qty,lock:true});
+          pricedProduct=variant?{...prod,price:Number(variant.price)}:prod;
 
           const name=text(p.name||u.name,80); if(name.length<2) throw safeError('Nama penerima wajib diisi.');
           const channel=p.channel==='whatsapp'?'whatsapp':'email'; const ph=phone(p.phone,channel==='whatsapp');
@@ -229,8 +270,8 @@ export default async function handler(req,res){
             credentialsEnc=encryptCredentialPayload({email:accountEmail,password:accountPassword});
           }
 
-          voucher=await voucherQuote({code:p.voucherCode,userId:u.id,product:prod,qty,client});
-          const subtotal=Number(prod.price)*qty, afterDiscount=Math.max(0,subtotal-Number(voucher.discount||0));
+          voucher=await voucherQuote({code:p.voucherCode,userId:u.id,product:pricedProduct,qty,client});
+          const subtotal=Number(pricedProduct.price)*qty, afterDiscount=Math.max(0,subtotal-Number(voucher.discount||0));
           const {rows:userRows}=await client.query('SELECT balance FROM users WHERE id=$1 FOR UPDATE',[u.id]); const userBalance=Number(userRows[0]?.balance||0);
           const useBalance=bool(p.useBalance)&&bool(settings.balancePaymentEnabled); const balanceUsed=useBalance?Math.min(userBalance,afterDiscount):0; const due=Math.max(0,afterDiscount-balanceUsed);
 
@@ -251,11 +292,18 @@ export default async function handler(req,res){
 
           const orderId=`UPL-${new Date().toISOString().slice(2,10).replace(/-/g,'')}-${Math.random().toString(36).slice(2,10).toUpperCase()}`;
           const hours=Math.max(1,Math.min(72,Number(settings.paymentHours)||24)), customerNote=text(p.customerNote,800);
-          const finiteManualStock=Number(prod.stock)!==-1 && prod.fulfillment_mode!=='inventory';
+          const stockSource=variant||prod;
+          const finiteManualStock=Number(stockSource.stock)!==-1 && prod.fulfillment_mode!=='inventory';
           if(finiteManualStock){
-            const reserved=await client.query('UPDATE products SET stock=stock-$2,updated_at=NOW() WHERE id=$1 AND stock>=$2 RETURNING stock,low_stock_threshold',[prod.id,qty]);
-            if(!reserved.rowCount) throw safeError('Stok berubah saat checkout dan sekarang tidak mencukupi. Silakan coba lagi.');
-            lowStockAfter={stock:Number(reserved.rows[0].stock),threshold:Number(reserved.rows[0].low_stock_threshold||3)};
+            if(variant){
+              const reserved=await client.query('UPDATE product_variants SET stock=stock-$2,updated_at=NOW() WHERE id=$1 AND stock>=$2 RETURNING stock',[variant.id,qty]);
+              if(!reserved.rowCount) throw safeError('Stok varian berubah saat checkout dan sekarang tidak mencukupi. Silakan coba lagi.');
+              lowStockAfter={stock:Number(reserved.rows[0].stock),threshold:Number(prod.low_stock_threshold||3),label:variant.name};
+            }else{
+              const reserved=await client.query('UPDATE products SET stock=stock-$2,updated_at=NOW() WHERE id=$1 AND stock>=$2 RETURNING stock,low_stock_threshold',[prod.id,qty]);
+              if(!reserved.rowCount) throw safeError('Stok berubah saat checkout dan sekarang tidak mencukupi. Silakan coba lagi.');
+              lowStockAfter={stock:Number(reserved.rows[0].stock),threshold:Number(reserved.rows[0].low_stock_threshold||3),label:''};
+            }
           }
           if(balanceUsed>0){
             await client.query('UPDATE users SET balance=balance-$2,updated_at=NOW() WHERE id=$1 AND balance>=$2',[u.id,balanceUsed]);
@@ -266,8 +314,8 @@ export default async function handler(req,res){
           const selectedPayMethod=mode==='midtrans'?'snap':mode; const selectedPayChannel=mode==='midtrans'?'MIDTRANS':mode==='qris_manual'?'QRIS_MANUAL':'';
           const publicThumb=prod.thumbnail_data?`/api/product-image?id=${encodeURIComponent(prod.id)}&v=${encodeURIComponent(new Date(prod.updated_at||Date.now()).getTime())}`:(prod.thumbnail_url||'');
           const initialStatus=mode==='balance'?'processing':'pending_payment'; const verified=mode==='balance';
-          const {rows:ors}=await client.query(`INSERT INTO orders(id,user_id,email,name,phone,channel,product_id,product_name,product_thumbnail,duration,quantity,price,subtotal,discount,voucher_code,balance_used,total,bank_id,bank_name,bank_number,bank_holder,note,status,payment_mode,expires_at,request_id,stock_reserved,credentials_enc,credentials_status,gateway_payment_method,gateway_payment_channel,payment_submitted_at,payment_verified_at,processing_at)
-            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,NOW()+($25 || ' hours')::interval,$26,$27,$28,$29,$30,$31,$32,$33,$34) RETURNING *`,[orderId,u.id,u.email,name,ph,channel,prod.id,prod.name,publicThumb,prod.duration,qty,Number(prod.price),subtotal,voucher.discount,voucher.code,balanceUsed,due,bank.id||'',bank.name||'',bank.number||'',bank.holder||'',customerNote,initialStatus,mode,String(hours),requestId,finiteManualStock&&!verified,credentialsEnc,credentialsEnc?'encrypted':'',selectedPayMethod,selectedPayChannel,verified?new Date():null,verified?new Date():null,verified?new Date():null]);
+          const {rows:ors}=await client.query(`INSERT INTO orders(id,user_id,email,name,phone,channel,product_id,product_name,product_thumbnail,variant_id,variant_name,variant_subtitle,duration,quantity,price,subtotal,discount,voucher_code,balance_used,total,bank_id,bank_name,bank_number,bank_holder,note,status,payment_mode,expires_at,request_id,stock_reserved,credentials_enc,credentials_status,gateway_payment_method,gateway_payment_channel,payment_submitted_at,payment_verified_at,processing_at)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,NOW()+($28 || ' hours')::interval,$29,$30,$31,$32,$33,$34,$35,$36,$37) RETURNING *`,[orderId,u.id,u.email,name,ph,channel,prod.id,prod.name,publicThumb,variant?.id||'',variant?.name||'',variant?.subtitle||'',variant?.name||prod.duration,qty,Number(pricedProduct.price),subtotal,voucher.discount,voucher.code,balanceUsed,due,bank.id||'',bank.name||'',bank.number||'',bank.holder||'',customerNote,initialStatus,mode,String(hours),requestId,finiteManualStock&&!verified,credentialsEnc,credentialsEnc?'encrypted':'',selectedPayMethod,selectedPayChannel,verified?new Date():null,verified?new Date():null,verified?new Date():null]);
           order=ors[0]; await client.query('COMMIT');
         }catch(e){await client.query('ROLLBACK');throw e;}finally{await client.release();}
 
@@ -277,10 +325,10 @@ export default async function handler(req,res){
           catch(e){paymentError=e?.safe?e.message:'Midtrans belum dapat membuat transaksi.';await q(`UPDATE orders SET gateway_status='error',note=CASE WHEN note='' THEN $2 ELSE note || E'\n' || $2 END,updated_at=NOW() WHERE id=$1`,[order.id,`Payment gateway Midtrans: ${paymentError}`]);}
         }
         if(mode==='balance') await autoFulfillOrder(order.id,'balance');
-        await audit(u.email,'order_created',order.id,{productId:prod.id,subtotal:Number(order.subtotal),discount:Number(order.discount),balanceUsed:Number(order.balance_used),total:Number(order.total),mode,voucher:voucher.code});
-        await notifyAdmin('order','Pesanan baru',`${prod.name} · ${order.name} · Rp${Number(order.total).toLocaleString('id-ID')}`,order.id);
-        if(lowStockAfter&&lowStockAfter.stock<=lowStockAfter.threshold) await notifyAdmin('stock','Stok menipis',`${prod.name} tersisa ${lowStockAfter.stock}.`,prod.id);
-        await sendEmail(u.email,`Pesanan ${order.id} dibuat`,`<h2>Pesanan Uply Digital dibuat</h2><p>${escapeHtml(prod.name)} · ${escapeHtml(prod.duration)}</p><p>Subtotal: <strong>Rp${Number(order.subtotal).toLocaleString('id-ID')}</strong></p>${Number(order.discount)?`<p>Diskon: -Rp${Number(order.discount).toLocaleString('id-ID')}</p>`:''}${Number(order.balance_used)?`<p>Saldo: -Rp${Number(order.balance_used).toLocaleString('id-ID')}</p>`:''}<p>Total dibayar: <strong>Rp${Number(order.total).toLocaleString('id-ID')}</strong></p><p>Status: ${mode==='balance'?'pembayaran lunas dari saldo':'menunggu pembayaran'}.</p>`);
+        await audit(u.email,'order_created',order.id,{productId:prod.id,variantId:variant?.id||'',subtotal:Number(order.subtotal),discount:Number(order.discount),balanceUsed:Number(order.balance_used),total:Number(order.total),mode,voucher:voucher.code});
+        await notifyAdmin('order','Pesanan baru',`${prod.name}${variant?` · ${variant.name}`:''} · ${order.name} · Rp${Number(order.total).toLocaleString('id-ID')}`,order.id);
+        if(lowStockAfter&&lowStockAfter.stock<=lowStockAfter.threshold) await notifyAdmin('stock','Stok menipis',`${prod.name}${lowStockAfter.label?` · ${lowStockAfter.label}`:''} tersisa ${lowStockAfter.stock}.`,variant?.id||prod.id);
+        await sendEmail(u.email,`Pesanan ${order.id} dibuat`,`<h2>Pesanan Uply Digital dibuat</h2><p>${escapeHtml(prod.name)} · ${escapeHtml(variant?.name||prod.duration)}</p><p>Subtotal: <strong>Rp${Number(order.subtotal).toLocaleString('id-ID')}</strong></p>${Number(order.discount)?`<p>Diskon: -Rp${Number(order.discount).toLocaleString('id-ID')}</p>`:''}${Number(order.balance_used)?`<p>Saldo: -Rp${Number(order.balance_used).toLocaleString('id-ID')}</p>`:''}<p>Total dibayar: <strong>Rp${Number(order.total).toLocaleString('id-ID')}</strong></p><p>Status: ${mode==='balance'?'pembayaran lunas dari saldo':'menunggu pembayaran'}.</p>`);
         data={order:publicOrder((await q('SELECT * FROM orders WHERE id=$1',[order.id])).rows[0]),paymentUrl:paymentUrl||order.payment_url||'',paymentData:paymentData||order.gateway_payload||null,paymentError,duplicate:false};
       }
     }
@@ -315,18 +363,19 @@ export default async function handler(req,res){
       const u=await requireAuth(req); const orderId=text(p.orderId,80); const {rows}=await q('SELECT * FROM orders WHERE id=$1 AND user_id=$2 LIMIT 1',[orderId,u.id]); const o=rows[0]; if(!o||o.status!=='pending_payment') throw safeError('Pesanan ini tidak dapat dibatalkan sendiri.');
       if(o.payment_mode==='midtrans'&&o.gateway_order_id) await expirePayment(o.gateway_order_id);
       await q(`UPDATE orders SET status='cancelled',note='Dibatalkan pelanggan sebelum pembayaran terverifikasi.',credentials_enc='',credentials_status=CASE WHEN credentials_enc<>'' THEN 'purged' ELSE credentials_status END,updated_at=NOW() WHERE id=$1`,[orderId]);
-      if(o.stock_reserved){await q('UPDATE products SET stock=stock+$2,updated_at=NOW() WHERE id=$1 AND stock<>-1',[o.product_id,o.quantity]);await q('UPDATE orders SET stock_reserved=FALSE WHERE id=$1',[orderId]);}
+      if(o.stock_reserved){if(o.variant_id)await q('UPDATE product_variants SET stock=stock+$2,updated_at=NOW() WHERE id=$1 AND stock<>-1',[o.variant_id,o.quantity]);else await q('UPDATE products SET stock=stock+$2,updated_at=NOW() WHERE id=$1 AND stock<>-1',[o.product_id,o.quantity]);await q('UPDATE orders SET stock_reserved=FALSE WHERE id=$1',[orderId]);}
       await refundOrderCredits(orderId,u.email,'Pesanan dibatalkan pelanggan.'); await audit(u.email,'order_cancelled',orderId,{}); data=true;
     }
     else if(action==='adminData'){
       const a=await requireAdmin(req);
-      const [orders,products,banks,customers,inv,invItems,aud,s,vouchers,ledger,notifications,daily,topProducts,paymentMix]=await Promise.all([
+      const [orders,products,variants,banks,customers,inv,invItems,aud,s,vouchers,ledger,notifications,daily,topProducts,paymentMix]=await Promise.all([
         q('SELECT * FROM orders ORDER BY created_at DESC LIMIT 1000'),
         q('SELECT * FROM products ORDER BY created_at,id'),
+        q('SELECT * FROM product_variants ORDER BY product_id,sort_order,created_at,id'),
         q('SELECT * FROM banks ORDER BY created_at,id'),
         q(`SELECT u.id,u.email,u.name,u.phone,u.balance,u.membership_tier,u.membership_manual,u.created_at,COUNT(o.id)::int AS orders_count,COUNT(o.id) FILTER (WHERE o.status='completed')::int AS completed_count,COALESCE(SUM(CASE WHEN o.status='completed' THEN COALESCE(NULLIF(o.subtotal,0),o.price*o.quantity)-o.discount ELSE 0 END),0)::bigint AS spent FROM users u LEFT JOIN orders o ON o.user_id=u.id GROUP BY u.id ORDER BY u.created_at DESC LIMIT 1000`),
-        q(`SELECT product_id,status,COUNT(*)::int AS count FROM inventory GROUP BY product_id,status`),
-        q(`SELECT i.id,i.product_id,p.name AS product_name,i.item_value,i.note,i.status,i.order_id,i.created_at,i.updated_at FROM inventory i LEFT JOIN products p ON p.id=i.product_id ORDER BY i.created_at DESC LIMIT 1000`),
+        q(`SELECT product_id,variant_id,status,COUNT(*)::int AS count FROM inventory GROUP BY product_id,variant_id,status`),
+        q(`SELECT i.id,i.product_id,i.variant_id,p.name AS product_name,pv.name AS variant_name,i.item_value,i.note,i.status,i.order_id,i.created_at,i.updated_at FROM inventory i LEFT JOIN products p ON p.id=i.product_id LEFT JOIN product_variants pv ON pv.id=i.variant_id ORDER BY i.created_at DESC LIMIT 1000`),
         q('SELECT id,timestamp,actor,action,record_id,detail FROM audit ORDER BY timestamp DESC LIMIT 400'),
         getSettings(),
         q(`SELECT v.*,COALESCE(u.used,0)::int AS used FROM vouchers v LEFT JOIN (SELECT voucher_code,COUNT(*)::int AS used FROM voucher_usages GROUP BY voucher_code) u ON u.voucher_code=v.code ORDER BY v.created_at DESC`),
@@ -336,15 +385,16 @@ export default async function handler(req,res){
         q(`SELECT product_id,MAX(product_name) AS name,COUNT(*) FILTER (WHERE status='completed')::int AS completed,COALESCE(SUM(CASE WHEN status='completed' THEN quantity ELSE 0 END),0)::int AS units,COALESCE(SUM(CASE WHEN status='completed' THEN COALESCE(NULLIF(subtotal,0),price*quantity)-discount ELSE 0 END),0)::bigint AS revenue FROM orders GROUP BY product_id ORDER BY revenue DESC LIMIT 10`),
         q(`SELECT payment_mode,COUNT(*)::int AS orders,COALESCE(SUM(CASE WHEN status IN ('processing','completed') THEN total+balance_used ELSE 0 END),0)::bigint AS revenue FROM orders GROUP BY payment_mode ORDER BY orders DESC`)
       ]);
-      const invMap={}; for(const r of inv.rows){invMap[r.product_id]??={available:0,delivered:0,disabled:0};invMap[r.product_id][r.status]=Number(r.count);}
+      const invMap={},invVariant={}; for(const r of inv.rows){invMap[r.product_id]??={available:0,delivered:0,disabled:0};invMap[r.product_id][r.status]=(invMap[r.product_id][r.status]||0)+Number(r.count);if(r.variant_id){invVariant[r.variant_id]??={available:0,delivered:0,disabled:0};invVariant[r.variant_id][r.status]=Number(r.count);}}
+      const variantsByProduct={}; for(const v of variants.rows){const prod=products.rows.find(p=>p.id===v.product_id);const pv=publicVariant(v,invVariant[v.id]?.available||0,prod?.fulfillment_mode||'manual');(variantsByProduct[v.product_id]??=[]).push(pv);}
       const methods=availablePaymentMethods(s,banks.rows.filter(b=>b.active));
       data={
         orders:orders.rows.map(x=>publicOrder(x,true)),
-        products:products.rows.map(p=>publicProduct(p,invMap[p.id]?.available||0)),
+        products:products.rows.map(p=>({...publicProduct(p,invMap[p.id]?.available||0,variantsByProduct[p.id]||[]),allVariants:variantsByProduct[p.id]||[]})),
         banks:banks.rows,
         customers:customers.rows.map(c=>({...c,balance:Number(c.balance||0),membershipTier:(c.membership_manual||!bool(s.autoRoleEnabled))?(c.membership_tier||'customer'):tierFromStats(c.completed_count,c.spent),membershipManual:!!c.membership_manual,ordersCount:Number(c.orders_count),completedCount:Number(c.completed_count),spent:Number(c.spent)})),
         inventory:invMap,
-        inventoryItems:invItems.rows.map(i=>({id:i.id,productId:i.product_id,productName:i.product_name||i.product_id,itemValue:i.item_value,note:i.note||'',status:i.status,orderId:i.order_id||'',createdAt:i.created_at,updatedAt:i.updated_at})),
+        inventoryItems:invItems.rows.map(i=>({id:i.id,productId:i.product_id,variantId:i.variant_id||'',productName:i.product_name||i.product_id,variantName:i.variant_name||'',itemValue:i.item_value,note:i.note||'',status:i.status,orderId:i.order_id||'',createdAt:i.created_at,updatedAt:i.updated_at})),
         vouchers:vouchers.rows.map(v=>({...v,discountValue:Number(v.discount_value),minSpend:Number(v.min_spend),maxDiscount:Number(v.max_discount),usageLimit:Number(v.usage_limit),perUserLimit:Number(v.per_user_limit),used:Number(v.used),productIds:Array.isArray(v.product_ids)?v.product_ids:[]})),
         balanceLedger:ledger.rows.map(l=>({...l,amount:Number(l.amount)})),
         notifications:notifications.rows,
@@ -364,6 +414,32 @@ export default async function handler(req,res){
         ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,category=EXCLUDED.category,duration=EXCLUDED.duration,price=EXCLUDED.price,description=EXCLUDED.description,benefits=EXCLUDED.benefits,terms=EXCLUDED.terms,stock=EXCLUDED.stock,active=EXCLUDED.active,badge=EXCLUDED.badge,icon=EXCLUDED.icon,fulfillment_mode=EXCLUDED.fulfillment_mode,thumbnail_url=EXCLUDED.thumbnail_url,thumbnail_mime=CASE WHEN EXCLUDED.thumbnail_data<>'' THEN EXCLUDED.thumbnail_mime ELSE products.thumbnail_mime END,thumbnail_data=CASE WHEN EXCLUDED.thumbnail_data<>'' THEN EXCLUDED.thumbnail_data ELSE products.thumbnail_data END,featured=EXCLUDED.featured,requires_login_credentials=EXCLUDED.requires_login_credentials,low_stock_threshold=EXCLUDED.low_stock_threshold,updated_at=NOW()`,[pid,name,category,duration,price,text(x.description,300),JSON.stringify(benefits),text(x.terms,2000),stock,bool(x.active),text(x.badge,40),text(x.icon,30)||'generic',mode,thumbnail,thumbnailMime,thumbnailData,featured,requiresLogin,lowStockThreshold]);
       if(!upload && (bool(x.clearUploadedThumbnail) || !!thumbnail)) await q(`UPDATE products SET thumbnail_mime='',thumbnail_data='',updated_at=NOW() WHERE id=$1`,[pid]);
       await audit(a.email,'product_saved',pid,{name,mode,featured,requiresLogin,thumbnailUpload:!!upload}); data={id:pid};
+    }
+    else if(action==='saveProductVariant'){
+      const a=await requireAdmin(req); const x=p.variant||{}; const productId=text(x.productId,100); let variantId=text(x.id,100)||id('var');
+      const product=(await q('SELECT id,name,fulfillment_mode FROM products WHERE id=$1 LIMIT 1',[productId])).rows[0]; if(!product) throw safeError('Produk tidak ditemukan.');
+      const name=text(x.name,80),subtitle=text(x.subtitle,140),price=Number(x.price),compareAtPrice=Math.max(0,Number(x.compareAtPrice)||0),stock=Number(x.stock),sortOrder=Math.max(-999,Math.min(999,Number(x.sortOrder)||0)),badge=text(x.badge,40);
+      if(name.length<1||!Number.isInteger(price)||price<1000||!Number.isInteger(stock)||stock<-1) throw safeError('Data varian belum valid.');
+      if(compareAtPrice>0&&compareAtPrice<price) throw safeError('Harga coret harus lebih besar atau sama dengan harga jual.');
+      await q(`INSERT INTO product_variants(id,product_id,name,subtitle,price,compare_at_price,stock,active,badge,sort_order,updated_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+        ON CONFLICT(id) DO UPDATE SET product_id=EXCLUDED.product_id,name=EXCLUDED.name,subtitle=EXCLUDED.subtitle,price=EXCLUDED.price,compare_at_price=EXCLUDED.compare_at_price,stock=EXCLUDED.stock,active=EXCLUDED.active,badge=EXCLUDED.badge,sort_order=EXCLUDED.sort_order,updated_at=NOW()`,
+        [variantId,productId,name,subtitle,price,compareAtPrice,stock,bool(x.active),badge,sortOrder]);
+      await audit(a.email,'product_variant_saved',variantId,{productId,name,price,stock}); data={id:variantId};
+    }
+    else if(action==='deleteProductVariant'){
+      const a=await requireAdmin(req); const variantId=text(p.variantId,100); const v=(await q('SELECT * FROM product_variants WHERE id=$1 LIMIT 1',[variantId])).rows[0]; if(!v) throw safeError('Varian tidak ditemukan.');
+      const used=(await q('SELECT COUNT(*)::int AS n FROM orders WHERE variant_id=$1',[variantId])).rows[0]?.n||0;
+      const inventory=(await q('SELECT COUNT(*)::int AS n FROM inventory WHERE variant_id=$1',[variantId])).rows[0]?.n||0;
+      if(Number(used)>0||Number(inventory)>0) await q('UPDATE product_variants SET active=FALSE,updated_at=NOW() WHERE id=$1',[variantId]); else await q('DELETE FROM product_variants WHERE id=$1',[variantId]);
+      await audit(a.email,'product_variant_removed',variantId,{productId:v.product_id,softDelete:Number(used)>0||Number(inventory)>0}); data=true;
+    }
+    else if(action==='adjustVariantStock'){
+      const a=await requireAdmin(req); const variantId=text(p.variantId,100),operation=String(p.operation||'add'),amount=Number(p.amount);
+      if(!['add','set','subtract'].includes(operation)) throw safeError('Operasi stok tidak valid.'); if(!Number.isInteger(amount)) throw safeError('Jumlah stok harus berupa angka bulat.'); if(operation!=='set'&&amount<1) throw safeError('Jumlah perubahan stok minimal 1.'); if(operation==='set'&&amount<-1) throw safeError('Stok minimal -1.');
+      const client=await pool.connect(); let updated;
+      try{await client.query('BEGIN');const {rows}=await client.query(`SELECT v.*,p.fulfillment_mode,p.name AS product_name FROM product_variants v JOIN products p ON p.id=v.product_id WHERE v.id=$1 FOR UPDATE`,[variantId]);const v=rows[0];if(!v)throw safeError('Varian tidak ditemukan.');if(v.fulfillment_mode==='inventory')throw safeError('Produk ini memakai Inventory Otomatis. Tambahkan stok varian dari menu Inventory.');const current=Number(v.stock);let next=current;if(operation==='set')next=amount;else{if(current===-1){if(operation==='subtract')throw safeError('Stok Tanpa Batas tidak dapat dikurangi. Gunakan Set stok.');next=amount;}else next=operation==='add'?current+amount:current-amount;if(next<0)throw safeError('Stok tidak boleh kurang dari 0.');}updated=(await client.query('UPDATE product_variants SET stock=$2,updated_at=NOW() WHERE id=$1 RETURNING *',[variantId,next])).rows[0];await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{await client.release();}
+      await audit(a.email,'variant_stock_adjusted',variantId,{operation,amount,newStock:Number(updated.stock)}); data={id:variantId,stock:Number(updated.stock)};
     }
     else if(action==='adjustProductStock'){
       const a=await requireAdmin(req); const productId=text(p.productId,100), operation=String(p.operation||'add'); const amount=Number(p.amount);
@@ -409,14 +485,16 @@ export default async function handler(req,res){
     }
     else if(action==='inventoryAdd'){
       const a=await requireAdmin(req);
-      const productId=text(p.productId,100), itemValue=text(p.itemValue,5000), note=text(p.note,300);
+      const productId=text(p.productId,100),variantId=text(p.variantId,100), itemValue=text(p.itemValue,5000), note=text(p.note,300);
       const status=['available','disabled'].includes(String(p.status))?String(p.status):'available';
       if(!itemValue) throw safeError('Isi kode, link, atau detail inventory.');
       const exists=await q('SELECT id,fulfillment_mode FROM products WHERE id=$1',[productId]); if(!exists.rowCount) throw safeError('Produk tidak ditemukan.');
       if(exists.rows[0].fulfillment_mode!=='inventory') throw safeError('Produk ini memakai stok manual. Gunakan tombol Tambah Stok pada menu Produk.');
+      const hasVariants=(await q('SELECT COUNT(*)::int AS n FROM product_variants WHERE product_id=$1 AND active=TRUE',[productId])).rows[0]?.n||0;
+      if(Number(hasVariants)>0){const vr=await q('SELECT id FROM product_variants WHERE id=$1 AND product_id=$2 AND active=TRUE',[variantId,productId]);if(!vr.rowCount)throw safeError('Pilih varian inventory yang aktif.');}
       const inventoryId=id('inv');
-      await q('INSERT INTO inventory(id,product_id,item_value,note,status) VALUES($1,$2,$3,$4,$5)',[inventoryId,productId,itemValue,note,status]);
-      await audit(a.email,'inventory_added',productId,{inventoryId,status}); data={id:inventoryId};
+      await q('INSERT INTO inventory(id,product_id,variant_id,item_value,note,status) VALUES($1,$2,$3,$4,$5,$6)',[inventoryId,productId,Number(hasVariants)>0?variantId:'',itemValue,note,status]);
+      await audit(a.email,'inventory_added',productId,{inventoryId,variantId:Number(hasVariants)>0?variantId:'',status}); data={id:inventoryId};
     }
     else if(action==='inventorySetStatus'){
       const a=await requireAdmin(req); const inventoryId=text(p.inventoryId,120); const status=String(p.status||'');
@@ -428,10 +506,12 @@ export default async function handler(req,res){
       await audit(a.email,'inventory_status_updated',item.product_id,{inventoryId,from:item.status,to:status}); data=true;
     }
     else if(action==='inventoryImport'){
-      const a=await requireAdmin(req); const productId=text(p.productId,100); const items=Array.isArray(p.items)?p.items.map(v=>text(v,5000)).filter(Boolean).slice(0,1000):[]; if(!items.length) throw safeError('Masukkan minimal satu item inventory.');
+      const a=await requireAdmin(req); const productId=text(p.productId,100),variantId=text(p.variantId,100); const items=Array.isArray(p.items)?p.items.map(v=>text(v,5000)).filter(Boolean).slice(0,1000):[]; if(!items.length) throw safeError('Masukkan minimal satu item inventory.');
       const exists=await q('SELECT id,fulfillment_mode FROM products WHERE id=$1',[productId]); if(!exists.rowCount) throw safeError('Produk tidak ditemukan.');
       if(exists.rows[0].fulfillment_mode!=='inventory') throw safeError('Produk ini memakai stok manual. Gunakan tombol Tambah Stok pada menu Produk.');
-      let added=0; for(const value of items){await q("INSERT INTO inventory(id,product_id,item_value,note,status) VALUES($1,$2,$3,'','available')",[id('inv'),productId,value]);added++;} await audit(a.email,'inventory_imported',productId,{count:added}); data={added};
+      const hasVariants=(await q('SELECT COUNT(*)::int AS n FROM product_variants WHERE product_id=$1 AND active=TRUE',[productId])).rows[0]?.n||0;
+      if(Number(hasVariants)>0){const vr=await q('SELECT id FROM product_variants WHERE id=$1 AND product_id=$2 AND active=TRUE',[variantId,productId]);if(!vr.rowCount)throw safeError('Pilih varian inventory yang aktif.');}
+      let added=0; for(const value of items){await q("INSERT INTO inventory(id,product_id,variant_id,item_value,note,status) VALUES($1,$2,$3,$4,'','available')",[id('inv'),productId,Number(hasVariants)>0?variantId:'',value]);added++;} await audit(a.email,'inventory_imported',productId,{variantId:Number(hasVariants)>0?variantId:'',count:added}); data={added};
     }
     else if(action==='getOrderCredentials'){
       const a=await requireAdmin(req); const orderId=text(p.orderId,80);
@@ -449,7 +529,7 @@ export default async function handler(req,res){
       let delivery=text(p.delivery,5000), note=text(p.note,800);
       if(['processing','completed'].includes(status) && ['pending_payment','review'].includes(old.status) && !bool(p.confirmPayment)) throw safeError('Centang konfirmasi bahwa pembayaran sudah diterima.');
       if(status==='completed' && !delivery && old.delivery) delivery=old.delivery; if(status==='completed'&&!delivery) throw safeError('Isi detail produk sebelum menyelesaikan pesanan manual.');
-      if(status==='cancelled' && old.stock_reserved){await q('UPDATE products SET stock=stock+$2,updated_at=NOW() WHERE id=$1 AND stock<>-1',[old.product_id,old.quantity]);}
+      if(status==='cancelled' && old.stock_reserved){if(old.variant_id)await q('UPDATE product_variants SET stock=stock+$2,updated_at=NOW() WHERE id=$1 AND stock<>-1',[old.variant_id,old.quantity]);else await q('UPDATE products SET stock=stock+$2,updated_at=NOW() WHERE id=$1 AND stock<>-1',[old.product_id,old.quantity]);}
       await q(`UPDATE orders SET status=$2,delivery=$3,note=$4,
         payment_submitted_at=CASE WHEN $2 IN ('processing','completed') AND payment_submitted_at IS NULL THEN NOW() ELSE payment_submitted_at END,
         payment_verified_at=CASE WHEN $2 IN ('processing','completed') AND payment_verified_at IS NULL THEN NOW() ELSE payment_verified_at END,
@@ -467,8 +547,8 @@ export default async function handler(req,res){
     else if(action==='validateVoucher'){
       const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
       const {rows}=await q('SELECT * FROM products WHERE id=$1 AND active=TRUE LIMIT 1',[text(p.productId,100)]); const prod=rows[0]; if(!prod) throw safeError('Produk tidak ditemukan.');
-      const qty=Math.max(1,Math.min(5,Number(p.quantity)||1)); const quote=await voucherQuote({code:p.code,userId:u.id,product:prod,qty});
-      data={...quote,subtotal:Number(prod.price)*qty,total:Math.max(0,Number(prod.price)*qty-quote.discount)};
+      const qty=Math.max(1,Math.min(5,Number(p.quantity)||1)); const variant=await resolveVariant({db:{query:(t,pa)=>q(t,pa)},product:prod,variantId:p.variantId,qty}); const priced=variant?{...prod,price:Number(variant.price)}:prod; const quote=await voucherQuote({code:p.code,userId:u.id,product:priced,qty});
+      data={...quote,variantId:variant?.id||'',subtotal:Number(priced.price)*qty,total:Math.max(0,Number(priced.price)*qty-quote.discount)};
     }
     else if(action==='saveVoucher'){
       const a=await requireAdmin(req); const x=p.voucher||{}; const code=text(x.code,40).toUpperCase().replace(/[^A-Z0-9_-]/g,''); if(code.length<3) throw safeError('Kode voucher minimal 3 karakter.');
