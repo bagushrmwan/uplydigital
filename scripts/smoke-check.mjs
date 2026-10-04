@@ -18,5 +18,10 @@ for(const marker of ['saveVoucher','adjustBalance','setCustomerTier','validateVo
 for(const marker of ['Smart Voucher System','Balance System','Reporting System','Role Connector Otomatis']){ if(!app.includes(marker)){console.error('UI FEATURE MISSING',marker);ok=false;} }
 const db=fs.readFileSync(new URL('../lib/db.js',import.meta.url),'utf8');
 for(const marker of ['CREATE TABLE IF NOT EXISTS vouchers','CREATE TABLE IF NOT EXISTS balance_ledger','CREATE TABLE IF NOT EXISTS admin_notifications']){if(!db.includes(marker)){console.error('DB FEATURE MISSING',marker);ok=false;}}
+
+for(const marker of ['checkout-qty-stepper','data-checkout-minus','checkoutPreflight','data-product-thumb']){ if(!app.includes(marker)){console.error('HOTFIX UI MISSING',marker);ok=false;} }
+if(api.includes('`${prod.name} · ${name} ·')){console.error('LEGACY CHECKOUT SCOPE BUG STILL PRESENT');ok=false;}
+if(!api.includes("`${prod.name} · ${order.name} ·")){console.error('ORDER NAME HOTFIX MISSING');ok=false;}
+
 if(!ok) process.exit(1);
 console.log('Smoke check OK');
