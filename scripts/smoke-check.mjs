@@ -23,5 +23,11 @@ for(const marker of ['checkout-qty-stepper','data-checkout-minus','checkoutPrefl
 if(api.includes('`${prod.name} · ${name} ·')){console.error('LEGACY CHECKOUT SCOPE BUG STILL PRESENT');ok=false;}
 if(!api.includes("`${prod.name} · ${order.name} ·")){console.error('ORDER NAME HOTFIX MISSING');ok=false;}
 
+
+for(const marker of ['function accountPage()','profileForm','passwordForm','data-logout-all','#akun']){if(!app.includes(marker)){console.error('V26 ACCOUNT UX MISSING',marker);ok=false;}}
+for(const marker of ["action==='updateProfile'","action==='changePassword'","action==='logoutAll'"]){if(!api.includes(marker)){console.error('V26 ACCOUNT API MISSING',marker);ok=false;}}
+const market=fs.readFileSync(new URL('../market.css',import.meta.url),'utf8');
+for(const marker of ['UPLY DIGITAL V26','--uply-primary:#0b5cff','.v18-buy-box .btn.dark','.account-layout-v26']){if(!market.includes(marker)){console.error('V26 BRAND CSS MISSING',marker);ok=false;}}
+
 if(!ok) process.exit(1);
 console.log('Smoke check OK');
