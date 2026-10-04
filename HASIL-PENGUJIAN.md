@@ -1,17 +1,13 @@
-# Hasil Pengujian — Uply Digital V25 Business Suite
+# Hasil Pengujian Uply Digital V27
 
-Tanggal build: 4 Oktober 2026
+Tanggal build: 2026-10-04
 
-## Pengujian statis yang dijalankan
+## Static syntax check
 
-Perintah berikut berhasil tanpa syntax error:
+`npm run check` — PASS
 
-```bash
-npm run check
-npm run test:smoke
-```
+Mencakup:
 
-`npm run check` memeriksa:
 - `app.js`
 - `api/uply.js`
 - `api/health.js`
@@ -24,54 +20,37 @@ npm run test:smoke
 - `lib/payment-state.js`
 - `lib/business.js`
 
-Smoke check memastikan file Vercel inti tersedia dan marker fitur berikut ada pada frontend/API/database:
-- Smart Voucher System
-- Balance System
-- Reporting System
-- Role Connector Otomatis
-- tabel `vouchers`
-- tabel `balance_ledger`
-- tabel `admin_notifications`
-- endpoint QRIS image
-- route Vercel utama
+## Smoke check
 
-## Pemeriksaan logika V25
+`npm run test:smoke` — PASS
 
-Diperiksa secara statis:
-- migrasi database menggunakan `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` dan tidak melakukan reset data;
-- voucher divalidasi di server sebelum diskon dipakai;
-- penggunaan voucher dicatat pada `voucher_usages`;
-- saldo dicatat pada `balance_ledger`;
-- refund saldo dibuat idempotent menggunakan `credit_refunded`;
-- checkout mendukung Midtrans, transfer manual, QRIS manual, dan saldo;
-- QRIS statis tidak ditandai sebagai pembayaran otomatis;
-- stok manual dan inventory otomatis dipisahkan;
-- threshold stok menipis tersedia per produk;
-- role otomatis dapat di-override admin;
-- laporan CSV tersedia dari panel admin;
-- credential top-up tidak dimasukkan ke public order response;
-- route `/api/qris-image` tidak mengekspos data QRIS melalui katalog JSON.
+Marker yang diperiksa antara lain:
 
-## Yang harus diuji setelah deploy Production
+- tabel `product_variants`;
+- kolom variant pada order dan inventory;
+- API save/delete/adjust stock variant;
+- resolver server-side variant;
+- UI pilih varian;
+- UI admin varian;
+- compatibility V26 account UX;
+- business suite Voucher/Balance/Reporting/Role;
+- branding Uply Digital.
 
-Pengujian berikut membutuhkan environment/account milik pengguna dan tidak dapat divalidasi secara nyata dari build lokal:
-1. Koneksi Neon PostgreSQL Production.
-2. Migrasi schema pada database Production yang sudah berisi data.
-3. Transaksi Midtrans Production dan channel pembayaran merchant yang aktif.
-4. Webhook Midtrans dari jaringan publik.
-5. Pengiriman email Resend jika `RESEND_API_KEY` dipakai.
-6. Upload QRIS/thumbnail dan penyimpanan data pada database Production.
-7. Siklus order nyata: checkout → pembayaran → fulfilment → invoice → report.
+## Logic review
 
-Sebelum deploy Production disarankan membuat snapshot/backup database Neon dan melakukan satu order uji bernilai kecil atau memakai metode manual terlebih dahulu.
+PASS untuk source-level review:
 
+- produk tanpa varian tetap memakai harga/stok lama;
+- produk dengan varian mewajibkan `variantId` di checkout;
+- harga varian dibaca ulang dari PostgreSQL;
+- stok manual varian direserve dalam database transaction;
+- stok varian dikembalikan pada cancel/expire/payment failure;
+- inventory otomatis difilter per `product_id + variant_id`;
+- cart menyimpan varian;
+- checkout, order dan CSV membawa nama varian;
+- varian stok 0 disabled di storefront;
+- delete varian yang sudah dipakai berubah menjadi nonaktif agar histori aman.
 
-## V25.1 hotfix checks
-- `npm run check`: PASS
-- `npm run test:smoke`: PASS
-- Checkout scope regression check (`order.name`): PASS
-- Checkout preflight marker: PASS
-- Custom mobile quantity control marker: PASS
-- Product thumbnail fallback marker: PASS
-- SVG action icons present: PASS
-- Live Neon/Midtrans Production transaction tetap harus diuji setelah deploy karena membutuhkan credential merchant pengguna.
+## Batas pengujian
+
+Belum diuji terhadap database Neon production dan transaksi payment production milik pengguna karena credential production tidak tersedia di lingkungan build. Setelah deploy lakukan satu order uji untuk produk dengan varian sebelum membuka ke pelanggan umum.
