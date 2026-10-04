@@ -1,31 +1,35 @@
-# Uply Digital V21 — Vercel Marketplace Redesign
+# Uply Digital V25 — Business Suite (Vercel)
 
-Versi ini adalah kelanjutan V20 untuk Vercel dengan redesign storefront lengkap. Backend tetap menggunakan Vercel Serverless Functions + PostgreSQL/Neon.
+V25 mengembangkan storefront V23 menjadi sistem operasional toko digital yang lebih lengkap tanpa reset database.
 
-## Deploy
-1. Upload seluruh isi folder/repository ke GitHub.
-2. Import project ke Vercel.
-3. Pastikan Root Directory adalah root project.
-4. Tambahkan Environment Variables seperti V20.
-5. Deploy.
+## Stack
+- Vercel Static + Serverless Functions
+- Node.js 20+
+- PostgreSQL / Neon
+- Midtrans Snap (opsional / production sesuai env)
+- Transfer bank manual + QRIS manual
+- Frontend vanilla HTML/CSS/JS
 
-## Environment Variables
-- DATABASE_URL
-- SESSION_SECRET
-- CREDENTIAL_ENCRYPTION_KEY
-- ADMIN_EMAIL
-- ADMIN_PASSWORD
-- PAYMENT_MODE
-- MIDTRANS_SERVER_KEY (jika Midtrans dipakai)
-- MIDTRANS_IS_PRODUCTION
-- SITE_URL
-- ALLOWED_ORIGIN
+## Modul utama V25
+1. Dashboard Admin Lengkap
+2. Auto Payment via Midtrans + QRIS manual fallback
+3. Instant Auto Delivery melalui Inventory
+4. Balance System + ledger
+5. Smart Voucher System
+6. Auto Recap & Statistik 30 hari
+7. Multi Payment: Midtrans / Transfer Manual / QRIS Manual / Saldo
+8. Smart Stock Management + low-stock threshold
+9. Dokumentasi di dalam Panel Admin
+10. Role Connector Otomatis: Customer → Member → Reseller → VIP
+11. Reporting System + export CSV
+12. Notification Center
+13. Audit Log
 
-## File UI utama
-- index.html
-- styles.css
-- market.css (redesign V21)
-- app.js
+## Migrasi database
+`ensureSchema()` membuat tabel/kolom baru menggunakan `CREATE TABLE IF NOT EXISTS` dan `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. Tidak ada reset/drop database.
 
-## Fitur yang dipertahankan
-Login customer/admin, catalog, cart, checkout, dashboard, order, invoice, admin stock, inventory, upload thumbnail, theme, PostgreSQL/Neon, dan payment backend V20.
+## Catatan Auto QRIS
+- QRIS otomatis memerlukan payment provider/API yang memberi status transaksi/webhook. V25 mendukung Midtrans untuk otomatis jika QRIS aktif pada merchant Midtrans.
+- Gambar QRIS statis yang diupload di Panel Admin adalah **manual verification**; pelanggan upload bukti, lalu admin memverifikasi.
+
+Lihat `TUTORIAL-VERCEL-V25.md` dan `FITUR-BISNIS-V25.md`.

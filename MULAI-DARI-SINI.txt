@@ -1,11 +1,14 @@
-UPLY DIGITAL V21 — VERCEL
+UPLY DIGITAL V25 — MULAI DARI SINI
 
-1. Extract ZIP.
-2. Upload seluruh file ke repository GitHub (jangan folder pembungkus tambahan).
-3. Import repository ke Vercel.
-4. Tambahkan Environment Variables.
-5. Deploy.
-6. Buka /api/health untuk mengecek backend dan database.
+1. Backup database Neon production.
+2. Replace seluruh isi repo dengan V25.
+3. Pastikan Environment Variables lama tetap ada.
+4. Untuk multi-payment disarankan PAYMENT_MODE=hybrid.
+5. Redeploy di Vercel.
+6. Buka /api/health.
+7. Login Admin → Pembayaran & Toko.
+8. Aktifkan metode pembayaran yang ingin dipakai.
+9. Buat satu voucher test dan test checkout.
+10. Pastikan admin order dapat diproses dari mobile.
 
-UI V21 menggunakan market.css sebagai lapisan redesign di atas styles.css.
-Jangan hapus market.css atau link-nya di index.html.
+Database lama tidak perlu di-reset. V25 menambah tabel/kolom secara non-destructive.

@@ -25,6 +25,9 @@ const state = {
   inventoryStatus: 'all',
   pendingCheckout: '',
   checkoutQty: 1,
+  appliedVoucher: null,
+  reportFrom: '',
+  reportTo: '',
   cart: (()=>{ try{return JSON.parse(localStorage.getItem('uply_cart')||'null')}catch{return null} })()
 };
 
@@ -69,7 +72,26 @@ function cartHTML(){
   const p=cartProduct();
   if(!p) return `<div class="empty compact"><div class="cart-empty-icon">🛒</div><h3>Keranjang masih kosong</h3><p>Pilih produk yang kamu butuhkan lalu tambahkan ke keranjang.</p><button class="btn full" type="button" data-cart-shop>Mulai Belanja</button></div>`;
   const qty=Math.max(1,Math.min(Number(state.cart.qty)||1,p.stock>0?Number(p.stock):5));
-  return `<div class="cart-item"><div class="cart-item-cover thumb-cart">${productThumb(p,'cart-thumb-img')}</div><div class="cart-item-info"><small>${esc(p.category)}</small><strong>${esc(p.name)}</strong><span>${esc(p.duration)}</span><div class="qty-control"><button type="button" data-cart-minus>−</button><b>${qty}</b><button type="button" data-cart-plus>+</button></div></div><div class="cart-item-price"><button type="button" class="text-btn danger-text" data-cart-remove>Hapus</button><strong>${money(Number(p.price)*qty)}</strong></div></div><div class="cart-summary"><div><span>Subtotal (${qty} item)</span><strong>${money(Number(p.price)*qty)}</strong></div><div class="cart-total"><span>Total</span><strong>${money(Number(p.price)*qty)}</strong></div><button class="btn full" type="button" data-cart-checkout>Lanjut ke Checkout →</button><button class="text-btn full" type="button" data-cart-close>Lanjutkan Belanja</button></div>`;
+  const subtotal=Number(p.price)*qty;
+  const voucher=(state.appliedVoucher?.productId===p.id&&Number(state.appliedVoucher.qty)===qty)?state.appliedVoucher:null;
+  const discount=Number(voucher?.discount||0), total=Math.max(0,subtotal-discount);
+  return `<div class="koala-cart-shell">
+    <div class="cart-item koala-cart-item">
+      <div class="cart-item-cover thumb-cart">${productThumb(p,'cart-thumb-img')}</div>
+      <div class="cart-item-info"><small>${esc(p.category)}</small><strong>${esc(p.name)}</strong><span>${esc(p.duration)}</span><div class="qty-control"><button type="button" data-cart-minus>−</button><b>${qty}</b><button type="button" data-cart-plus>+</button></div></div>
+      <div class="cart-item-price"><button type="button" class="text-btn danger-text" data-cart-remove>Hapus</button><strong>${money(subtotal)}</strong></div>
+    </div>
+    <div class="koala-voucher">
+      <label><span>🎁 Kode Voucher</span><div><input id="cartVoucher" placeholder="Masukkan kode voucher"><button type="button" data-cart-voucher>Pakai</button></div></label>
+    </div>
+    <div class="cart-summary">
+      <div><span>Subtotal (${qty} item)</span><strong>${money(subtotal)}</strong></div>
+      ${discount?`<div><span>Voucher ${esc(voucher.code)}</span><strong style="color:#079467">-${money(discount)}</strong></div>`:''}
+      <div class="cart-total"><span>Total</span><strong>${money(total)}</strong></div>
+      <button class="btn full" type="button" data-cart-checkout>Lanjut ke Checkout →</button>
+      <button class="text-btn full" type="button" data-cart-close>Lanjutkan Belanja</button>
+    </div>
+  </div>`;
 }
 function openCart(){ updateCartUI(); const d=$('#cartDrawer'),b=$('#cartBackdrop'); if(d){d.classList.add('open');d.setAttribute('aria-hidden','false')} if(b){b.hidden=false;requestAnimationFrame(()=>b.classList.add('show'))} document.body.classList.add('drawer-open'); }
 function closeCart(){ const d=$('#cartDrawer'),b=$('#cartBackdrop'); if(d){d.classList.remove('open');d.setAttribute('aria-hidden','true')} if(b){b.classList.remove('show');setTimeout(()=>b.hidden=true,180)} document.body.classList.remove('drawer-open'); }
@@ -77,6 +99,7 @@ function addToCart(productId,qty=1){
   const p=state.catalog?.products?.find(x=>x.id===productId); if(!p) return msg('Produk tidak ditemukan.');
   const max=p.stock>0?Math.min(5,Number(p.stock)):5; const q=Math.max(1,Math.min(Number(qty)||1,max));
   if(state.cart && state.cart.productId!==productId) msg('Keranjang diganti dengan produk yang baru dipilih.');
+  if(!state.cart || state.cart.productId!==productId || Number(state.cart.qty)!==q) state.appliedVoucher=null;
   state.cart={productId,qty:q}; saveCart(); openCart();
 }
 
@@ -91,7 +114,7 @@ function openModal(title, html){
   modalBody.innerHTML = `<div class="modal-head"><h2>${esc(title)}</h2><button class="x" data-close aria-label="Tutup">✕</button></div><div class="modal-content">${html}</div>`;
   modal.showModal();
 }
-function closeModal(){ if (modal.open) modal.close(); }
+function closeModal(){ if (modal.open) modal.close(); modal.classList.remove('admin-order-dialog'); }
 
 modal.addEventListener('click', e => {
   if (e.target === modal) closeModal();
@@ -130,20 +153,23 @@ function inventoryStatus(s){ return `<span class="status inv-${esc(s)}">${esc(in
 
 function hero(){
   const products = state.catalog?.products || [];
-  const featured = products.filter(p=>p.featured || p.bestSeller).slice(0,4);
-  const accountCta = state.user ? `<a class="market-hero-secondary" href="${state.user.role==='admin'?'#admin':'#dashboard'}">${state.user.role==='admin'?'Panel Admin':'Dashboard Saya'}</a>` : `<button class="market-hero-secondary" type="button" data-open-register>Daftar Gratis</button>`;
-  return `<section class="market-hero">
-    <div class="wrap market-hero-inner">
-      <div class="market-hero-copy">
-        <span class="market-kicker">UPLY DIGITAL · PRODUK DIGITAL PILIHAN</span>
-        <h1>Belanja digital lebih mudah, <em>cepat, dan jelas.</em></h1>
-        <p>Temukan streaming, AI tools, top up, dan layanan perangkat dalam satu toko dengan alur pembelian yang sederhana.</p>
-        <div class="market-hero-actions"><button class="market-hero-primary" type="button" data-scroll-products>Lihat Produk</button>${accountCta}</div>
-        <div class="market-hero-points"><span>✓ Informasi transparan</span><span>✓ Status pesanan</span><span>✓ Support admin</span></div>
+  const accountCta = state.user
+    ? `<a class="koala-hero-secondary" href="${state.user.role==='admin'?'#admin':'#dashboard'}">${state.user.role==='admin'?'Panel Admin':'Dashboard Saya'}</a>`
+    : `<button class="koala-hero-secondary" type="button" data-open-register>Daftar Gratis</button>`;
+  return `<section class="koala-home-hero">
+    <div class="koala-dot-bg"></div>
+    <div class="wrap koala-hero-inner">
+      <div class="koala-hero-kicker">✦ PROVIDER PRODUK DIGITAL</div>
+      <h1>Dapatkan <span>Premium Digital</span><br>dengan Harga Terbaik</h1>
+      <p>Nikmati produk digital pilihan untuk streaming, produktivitas, top up, dan kebutuhan lainnya dengan proses yang mudah serta dukungan admin.</p>
+      <div class="koala-hero-actions">
+        <button class="koala-hero-primary" type="button" data-scroll-products>Lihat Produk</button>
+        ${accountCta}
       </div>
-      <div class="market-hero-showcase">
-        <div class="market-showcase-title">Produk populer</div>
-        <div class="market-showcase-grid">${featured.map((p,i)=>`<button type="button" data-view-product="${esc(p.id)}" class="market-showcase-item item-${i+1}">${productThumb(p,'market-showcase-thumb')}<span><b>${esc(p.name)}</b><small>${money(p.price)}</small></span></button>`).join('')}</div>
+      <div class="koala-hero-stats">
+        <span><b>${Math.max(24,products.length)}</b><small>Produk Digital</small></span>
+        <span><b>Fast</b><small>Proses Pesanan</small></span>
+        <span><b>Support</b><small>Bantuan Admin</small></span>
       </div>
     </div>
   </section>`;
@@ -197,38 +223,71 @@ function popularCategories(){
   const counts={}; for(const p of state.catalog.products) counts[p.category]=(counts[p.category]||0)+1;
   const cats=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,8);
   if(!cats.length) return '';
-  const map={
-    'Streaming':['▶','Film & hiburan'],
-    'AI & Produktivitas':['✦','Kerja & kreativitas'],
-    'Top Up':['★','Sosial & creator'],
-    'Perangkat':['⌁','IMEI & layanan'],
-    'Digital':['▦','Produk digital']
+  const iconMap={
+    'Streaming':'▶','AI & Produktivitas':'✦','Top Up':'★','Perangkat':'◇',
+    'Digital':'▦','Productivity Tools':'▣','Security':'◇','Music Streaming':'♫',
+    'Creative':'✎','Entertainment':'▤'
   };
-  return `<section class="popular-categories v18-categories"><div class="wrap"><div class="section-head v18-section-head"><div><span class="v18-mini-kicker">Kategori populer</span><h2>Temukan yang kamu butuhkan</h2><p>Jelajahi produk berdasarkan kategori.</p></div><button class="text-btn" type="button" data-scroll-products>Lihat semua →</button></div><div class="v18-category-grid">${cats.map(([c,n],i)=>{const m=map[c]||[categoryIcon(c),'Pilihan digital'];return `<button type="button" class="v18-category-card cat-${(i%6)+1}" data-filter="${esc(c)}"><b>${m[0]}</b><span><strong>${esc(c)}</strong><small>${esc(m[1])} · ${n} produk</small></span><em>→</em></button>`}).join('')}</div></div></section>`;
+  return `<section class="koala-category-section"><div class="wrap">
+    <div class="koala-section-title"><span>KATEGORI POPULER</span><h2>Jelajahi kategori produk digital</h2><p>Temukan produk sesuai kebutuhanmu.</p></div>
+    <div class="koala-category-grid">${cats.map(([c,n])=>`<button type="button" class="koala-category-card" data-filter="${esc(c)}"><b>${iconMap[c]||categoryIcon(c)}</b><strong>${esc(c)}</strong><small>${n} produk</small></button>`).join('')}</div>
+  </div></section>`;
 }
-
 function trustStrip(){
-  return `<section class="v18-trust"><div class="wrap v18-trust-grid"><article><b>⚡</b><span><strong>Proses cepat</strong><small>Alur checkout dibuat ringkas</small></span></article><article><b>🛡</b><span><strong>Pembayaran aman</strong><small>Midtrans atau transfer manual</small></span></article><article><b>✓</b><span><strong>Status transparan</strong><small>Pantau dari dashboard akun</small></span></article><article><b>◉</b><span><strong>Support admin</strong><small>Bantuan saat dibutuhkan</small></span></article></div></section>`;
+  return `<section class="koala-benefit-section"><div class="wrap">
+    <div class="koala-section-title center"><span>BENEFIT EKSKLUSIF</span><h2>Keuntungan yang Akan Anda Dapatkan</h2><p>Nikmati pengalaman belanja digital yang lebih mudah, aman, dan transparan di Uply Digital.</p></div>
+    <div class="koala-benefit-grid">
+      <article><b>◉</b><h3>Harga lebih hemat</h3><p>Produk digital pilihan dengan harga yang jelas sebelum checkout.</p></article>
+      <article><b>◇</b><h3>Proses lebih ringkas</h3><p>Alur pembelian dibuat sederhana dari pilih produk sampai pesanan diproses.</p></article>
+      <article><b>✓</b><h3>Status transparan</h3><p>Pantau status order langsung dari dashboard pelanggan.</p></article>
+      <article><b>☏</b><h3>Support admin</h3><p>Bantuan admin tersedia untuk proses manual maupun kendala pesanan.</p></article>
+    </div>
+  </div></section>`;
 }
 function promoSection(){
-  const promo=state.catalog.settings.promoBanner || 'Temukan paket digital pilihan dengan harga yang lebih hemat.';
-  return `<section class="v18-promo"><div class="wrap"><div class="v18-promo-card"><div><span class="v18-promo-pill">PROMO UPLY</span><h2>Upgrade kebutuhan digitalmu.</h2><p>${esc(promo)}</p></div><button class="btn v18-promo-cta" type="button" data-scroll-products>Lihat Produk →</button><div class="v18-promo-orb one"></div><div class="v18-promo-orb two"></div></div></div></section>`;
+  return `<section class="koala-platform"><div class="wrap">
+    <div class="koala-platform-card">
+      <span class="koala-dark-kicker">UNTUK TOKO DIGITAL</span>
+      <h2>Kelola kebutuhan digitalmu dalam satu tempat.</h2>
+      <p>Belanja produk, pantau pesanan, cek status pembayaran, dan kelola akun melalui dashboard Uply Digital.</p>
+      <div class="koala-platform-chips"><span>✓ Dashboard pelanggan</span><span>✓ Status pesanan real-time</span><span>✓ Pembayaran terintegrasi</span><span>✓ Dukungan admin</span></div>
+      <button class="koala-yellow-btn" type="button" data-scroll-products>Lihat Produk Lengkap →</button>
+    </div>
+  </div></section>`;
 }
 function socialProofSection(){
-  return `<section class="v18-social"><div class="wrap"><div class="section-head v18-section-head"><div><span class="v18-mini-kicker">Pengalaman pelanggan</span><h2>Belanja digital tanpa ribet</h2><p>Dirancang supaya proses pembelian mudah dipahami dari awal sampai selesai.</p></div></div><div class="v18-testimonials"><article><div class="v18-stars">★★★★★</div><p>“Checkout-nya simpel dan status order gampang dipantau. Tidak perlu bingung tanya progres.”</p><span><b>R</b><strong>Pelanggan Streaming</strong></span></article><article><div class="v18-stars">★★★★★</div><p>“Pilihan produk jelas, benefit dan ketentuan terlihat sebelum pembayaran.”</p><span><b>A</b><strong>Pelanggan AI Tools</strong></span></article><article><div class="v18-stars">★★★★★</div><p>“Untuk proses manual, informasi order tetap tersimpan rapi di dashboard.”</p><span><b>D</b><strong>Pelanggan Top Up</strong></span></article></div></div></section>`;
+  return `<section class="koala-blog-section"><div class="wrap">
+    <div class="koala-section-title center"><span>BLOG & ARTIKEL</span><h2>Tetap Update dengan Artikel Terbaru</h2><p>Tips singkat seputar produk digital, keamanan akun, dan cara menggunakan layanan premium dengan lebih nyaman.</p></div>
+    <div class="koala-blog-grid">
+      <article><div class="koala-blog-cover">UPLY<br>DIGITAL</div><small>Tips Digital</small><h3>Cara menjaga akun premium tetap aman</h3><p>Gunakan password unik, hindari membagikan OTP, dan cek perangkat yang sedang login.</p><a href="#bantuan">Baca Selengkapnya →</a></article>
+      <article><div class="koala-blog-cover alt">BELANJA<br>AMAN</div><small>Panduan</small><h3>Kenali alur pesanan sebelum checkout</h3><p>Pelajari status pembayaran, pemrosesan, sampai pesanan selesai dari dashboard.</p><a href="#bantuan">Baca Selengkapnya →</a></article>
+      <article><div class="koala-blog-cover dark">SUPPORT<br>UPLY</div><small>Bantuan</small><h3>Apa yang harus dilakukan jika order terkendala?</h3><p>Siapkan ID pesanan dan hubungi support agar proses pengecekan lebih cepat.</p><a href="#bantuan">Baca Selengkapnya →</a></article>
+    </div>
+  </div></section>`;
 }
 function faqSection(){
-  return `<section class="v18-faq"><div class="wrap v18-faq-grid"><div><span class="v18-mini-kicker">FAQ</span><h2>Pertanyaan yang sering ditanyakan</h2><p>Beberapa hal penting sebelum melakukan pembelian.</p><a class="btn light small" href="#bantuan">Buka pusat bantuan</a></div><div class="v18-faq-list"><details open><summary>Bagaimana cara membeli produk?</summary><p>Pilih produk, login atau daftar, isi data checkout, lalu selesaikan pembayaran. Status order akan muncul di dashboard.</p></details><details><summary>Bagaimana jika stok produk habis?</summary><p>Tombol pembelian akan dinonaktifkan sampai admin menambahkan stok kembali.</p></details><details><summary>Apakah pembayaran diproses otomatis?</summary><p>Jika mode Midtrans aktif, pembayaran diverifikasi otomatis melalui Midtrans Snap. Toko juga dapat menggunakan transfer manual sesuai pengaturan admin.</p></details><details><summary>Bagaimana proses produk Top Up manual?</summary><p>Data login yang diperlukan diminta saat checkout, disimpan terenkripsi, dan tidak boleh berisi OTP atau recovery code.</p></details></div></div></section>`;
+  return `<section class="koala-faq"><div class="wrap">
+    <div class="koala-section-title center"><span>FAQ</span><h2>Pertanyaan yang Sering Diajukan</h2><p>Temukan jawaban untuk pertanyaan umum sebelum melakukan pembelian.</p></div>
+    <div class="koala-faq-list">
+      <details><summary><span><b>Pembelian</b> Bagaimana cara pembelian dan pembayaran?</span><em>⌄</em></summary><p>Pilih produk, masuk ke akun, isi data checkout, lalu selesaikan pembayaran yang tersedia. Status order akan tampil di menu Pesanan.</p></details>
+      <details><summary><span><b>Keamanan</b> Apakah produk aman digunakan?</span><em>⌄</em></summary><p>Setiap produk memiliki ketentuan masing-masing. Baca deskripsi dan ketentuan sebelum membeli. Jangan pernah membagikan OTP, PIN, atau recovery code.</p></details>
+      <details><summary><span><b>Garansi</b> Berapa lama masa aktif dan garansi?</span><em>⌄</em></summary><p>Durasi dan ketentuan garansi ditampilkan pada detail produk dan dapat berbeda untuk setiap layanan.</p></details>
+      <details><summary><span><b>Support</b> Bagaimana jika mengalami kendala?</span><em>⌄</em></summary><p>Hubungi support Uply Digital dan sertakan ID pesanan agar admin dapat melakukan pengecekan lebih cepat.</p></details>
+      <details><summary><span><b>Harga</b> Mengapa harga produk dapat berubah?</span><em>⌄</em></summary><p>Harga mengikuti ketersediaan produk, provider, dan promo yang sedang berlaku.</p></details>
+    </div>
+  </div></section>`;
 }
 function catalogPage(){
   const cats = ['Semua', ...new Set(state.catalog.products.map(p=>p.category))];
-  return hero()+trustStrip()+popularCategories()+`<section id="produk" class="section v18-products"><div class="wrap">
-    <div class="section-head v18-section-head v18-products-head"><div><span class="v18-mini-kicker">Produk unggulan</span><h2>Pilihan digital untuk kebutuhanmu</h2><p>Harga, benefit, stok, dan ketentuan ditampilkan jelas sebelum checkout.</p></div><div class="v18-products-actions"><div class="v18-search"><span>⌕</span><input id="search" placeholder="Cari produk digital…" value="${esc(state.search)}"></div><span class="catalog-count">${state.catalog.products.length} produk</span></div></div>
+  return hero()+`<section id="produk" class="koala-products-section"><div class="wrap">
+    <div class="koala-section-title center"><span>PRODUK DIGITAL PREMIUM</span><h2>Koleksi Produk Premium dengan Harga Terjangkau</h2><p>Pilih produk digital premium dari berbagai kategori. Informasi stok, benefit, dan harga ditampilkan secara transparan.</p></div>
+    <div class="koala-filter-row">${cats.slice(0,7).map(c=>`<button class="koala-filter ${state.filter===c?'active':''}" data-filter="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+    <div class="koala-search-row"><div class="koala-search"><span>⌕</span><input id="search" placeholder="Cari produk digital…" value="${esc(state.search)}"></div><span>${state.catalog.products.length} produk tersedia</span></div>
     ${state.catalog.settings.notice?`<div class="notice">${esc(state.catalog.settings.notice)}</div>`:''}
     ${!state.catalog.settings.storeOpen?`<div class="notice warn">Toko sedang menutup pesanan baru.</div>`:''}
-    <div class="chips category-tabs v18-tabs">${cats.map(c=>`<button class="chip ${state.filter===c?'active':''}" data-filter="${esc(c)}">${esc(c)}</button>`).join('')}</div>
-    <div class="grid product-grid-v11 v18-product-grid" id="productGrid">${productCards()}</div>
-  </div></section>`+promoSection()+socialProofSection()+faqSection();
+    <div class="grid product-grid-v11 v18-product-grid koala-product-grid" id="productGrid">${productCards()}</div>
+    <div class="koala-more"><button class="koala-yellow-btn" type="button" data-scroll-products>✦ Lihat Semua Produk</button><small>Menampilkan produk digital yang tersedia di Uply Digital.</small></div>
+  </div></section>`+promoSection()+trustStrip()+socialProofSection()+faqSection()+popularCategories();
 }
 function helpPage(){
   return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Bantuan</div><h1>Belanja lebih jelas.</h1><p>Pembayaran bisa transfer manual atau otomatis melalui Midtrans Snap, tergantung pengaturan toko.</p></div>
@@ -290,41 +349,62 @@ function checkoutPage(id){
     state.pendingCheckout = id;
     return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Checkout</div><h1>Masuk untuk melanjutkan</h1><p>Checkout hanya menggunakan akun pelanggan agar pesanan dapat dipantau.</p></div><div class="panel" style="max-width:520px"><button class="btn full" data-checkout-login="${esc(id)}">Masuk / Daftar Pelanggan</button></div></div></section>`;
   }
-  const manual = state.catalog.settings.paymentMode === 'manual';
-  const paymentReady = state.catalog.settings.paymentReady !== false;
-  const banksAvailable = state.catalog.banks?.length > 0;
+  if(state.appliedVoucher?.productId!==p.id) state.appliedVoucher=null;
+  const methods=(state.catalog.paymentMethods||[]).filter(m=>m.id!=='balance');
   const maxQty = p.stock > 0 ? Math.max(1, Math.min(5, Number(p.stock))) : 5;
   const initialQty=Math.max(1,Math.min(maxQty,Number(state.checkoutQty||1)));
   const qtyOptions = Array.from({length:maxQty},(_,i)=>i+1).map(n=>`<option value="${n}" ${n===initialQty?'selected':''}>${n}</option>`).join('');
-  const paymentBox = manual
-    ? (banksAvailable
-      ? `<section class="checkout-section panel"><div class="section-label">METODE PEMBAYARAN</div><div class="payment-provider"><span>🏦</span><div><strong>Transfer Bank</strong><small>Pilih rekening Uply Digital yang tersedia.</small></div></div><div class="payment-options">${state.catalog.banks.map((b,i)=>`<label class="payment-option"><input type="radio" name="bankId" value="${esc(b.id)}" ${i===0?'checked':''} required><span><b>${esc(b.name)}</b><small>${esc(b.holder)}</small></span><em>Transfer</em></label>`).join('')}</div></section>`
-      : `<div class="notice warn"><strong>Checkout belum siap.</strong><br>Belum ada rekening pembayaran aktif.</div>`)
-    : (paymentReady
-      ? `<section class="checkout-section panel"><div class="section-label">METODE PEMBAYARAN</div><div class="payment-provider"><span>▦</span><div><strong>Midtrans Snap</strong><small>Pembayaran otomatis melalui halaman aman Midtrans. Metode yang muncul mengikuti channel aktif di akun Midtrans kamu.</small></div></div><label class="payment-option selected"><input type="radio" checked disabled><span><b>Midtrans Snap Checkout</b><small>QRIS, virtual account, e-wallet, dan metode lain akan tampil sesuai aktivasi merchant.</small></span><em>Otomatis</em></label><input type="hidden" name="paymentMethod" value="snap"><input type="hidden" name="paymentChannel" value=""></section>`
-      : `<div class="notice warn"><strong>Pembayaran otomatis belum siap.</strong><br>Periksa PAYMENT_MODE=midtrans, MIDTRANS_SERVER_KEY, MIDTRANS_IS_PRODUCTION, dan SITE_URL di Vercel Environment Variables.</div>`);
-  return `<section class="page checkout-page"><div class="wrap checkout-wrap"><a class="breadcrumb" href="#produk/${encodeURIComponent(p.id)}">← Kembali ke Produk</a><div class="checkout-title"><div><div class="section-kicker">Checkout Uply Digital</div><h1>Selesaikan pesananmu</h1><p>Periksa metode pembayaran dan data kontak sebelum melanjutkan.</p></div><span class="checkout-secure">🔒 Checkout aman</span></div>
+  const firstMethod=methods[0]?.id||'';
+  const payCards=methods.map((m,i)=>`<label class="payment-option smart-pay-card"><input type="radio" name="paymentMethod" value="${esc(m.id)}" ${i===0?'checked':''}><span><b>${m.id==='midtrans'?'⚡ ':m.id==='qris_manual'?'▣ ':'🏦 '}${esc(m.label)}</b><small>${m.id==='midtrans'?'Otomatis: status dibaca dari gateway dan webhook.':m.id==='qris_manual'?'Scan QRIS toko lalu upload bukti pembayaran.':'Transfer ke rekening toko lalu upload bukti.'}</small></span><em>${m.id==='midtrans'?'Otomatis':'Manual'}</em></label>`).join('');
+  const bankBlock=state.catalog.banks?.length?`<div class="payment-subpanel" data-pay-panel="manual" ${firstMethod!=='manual'?'hidden':''}><small>Pilih rekening tujuan</small>${state.catalog.banks.map((b,i)=>`<label class="payment-option"><input type="radio" name="bankId" value="${esc(b.id)}" ${i===0?'checked':''}><span><b>${esc(b.name)}</b><small>${esc(b.number)} · ${esc(b.holder)}</small></span></label>`).join('')}</div>`:'';
+  const qrisBlock=`<div class="payment-subpanel qris-checkout-box" data-pay-panel="qris_manual" ${firstMethod!=='qris_manual'?'hidden':''}><img src="/api/qris-image?v=${Date.now()}" alt="QRIS Uply Digital"><div><strong>${esc(state.catalog.settings.qrisName||'QRIS Manual')}</strong><small>Bayar sesuai nominal yang tertera lalu upload bukti dari detail pesanan.</small></div></div>`;
+  const subtotal=Number(p.price)*initialQty, discount=state.appliedVoucher?.discount||0;
+  const balance=Number(state.user.balance||0);
+  const externalReady=methods.length>0;
+  return `<section class="page checkout-page"><div class="wrap checkout-wrap"><a class="breadcrumb" href="#produk/${encodeURIComponent(p.id)}">← Kembali ke Produk</a><div class="checkout-title"><div><div class="section-kicker">Checkout Uply Digital</div><h1>Selesaikan pesananmu</h1><p>Voucher, saldo, dan metode pembayaran diproses server-side agar nominal tetap aman.</p></div><span class="checkout-secure">🔒 Checkout aman</span></div>
     <form id="checkoutForm" data-product-id="${esc(p.id)}" class="checkout-layout">
       <div class="stack">
-        ${paymentBox}
+        <section class="checkout-section panel"><div class="section-label">METODE PEMBAYARAN</div>${payCards||'<div class="notice warn">Belum ada metode pembayaran eksternal aktif. Kamu tetap dapat checkout jika saldo Uply mencukupi seluruh total.</div>'}${bankBlock}${qrisBlock}</section>
+        <section class="checkout-section panel voucher-checkout"><div class="section-label">VOUCHER & SALDO</div><label class="field">Kode voucher<div class="inline-action"><input id="checkoutVoucher" name="voucherCode" value="${esc(state.appliedVoucher?.code||'')}" placeholder="Contoh: UPLY10"><button type="button" class="btn light small" data-checkout-voucher>Terapkan</button></div><small id="voucherHint">${state.appliedVoucher?`Voucher ${esc(state.appliedVoucher.code)} aktif · hemat ${money(state.appliedVoucher.discount)}`:'Voucher akan diverifikasi ke server sebelum digunakan.'}</small></label>${state.catalog.settings.balancePaymentEnabled?`<label class="balance-toggle"><input type="checkbox" name="useBalance" id="useBalance" ${balance>0?'':'disabled'}><span><b>Gunakan Saldo Uply</b><small>Saldo tersedia: ${money(balance)}</small></span></label>`:''}</section>
 ${p.requiresLoginCredentials?`<section class="checkout-section panel credential-section"><div class="section-label">LOGIN AKUN UNTUK PROSES TOP UP</div><div class="credential-notice"><strong>Proses manual oleh admin</strong><p>Masukkan email dan password akun tujuan. Data disimpan terenkripsi dan dihapus otomatis setelah pesanan selesai/dibatalkan.</p><b>Jangan masukkan OTP, recovery code, PIN keamanan, atau kode 2FA.</b></div><label class="field">Email login akun<input name="accountEmail" type="email" autocomplete="off" required placeholder="email akun tujuan"></label><label class="field">Password akun<input name="accountPassword" type="password" autocomplete="new-password" required minlength="4" maxlength="200" placeholder="Password akun tujuan"></label></section>`:''}
-                <section class="checkout-section panel"><div class="section-label">KONTAK</div><div class="row"><label class="field">Nama Lengkap<input name="name" required minlength="2" maxlength="80" value="${esc(state.user.name)}"></label><label class="field">Email<input value="${esc(state.user.email)}" readonly><small>Email dari akun Uply Digital.</small></label></div><label class="field">WhatsApp<input name="phone" type="tel" maxlength="24" placeholder="Contoh: 081234567890"><small>Wajib jika detail dikirim melalui WhatsApp.</small></label><label class="field">Kirim detail melalui<select name="channel" id="checkoutChannel"><option value="email">Email</option><option value="whatsapp">WhatsApp</option></select></label><label class="field">Catatan untuk admin <small>Opsional</small><textarea name="customerNote" maxlength="800" placeholder="Contoh: mohon proses untuk region Indonesia atau informasi tambahan lainnya."></textarea></label></section>
+        <section class="checkout-section panel"><div class="section-label">KONTAK</div><div class="row"><label class="field">Nama Lengkap<input name="name" required minlength="2" maxlength="80" value="${esc(state.user.name)}"></label><label class="field">Email<input value="${esc(state.user.email)}" readonly><small>Email dari akun Uply Digital.</small></label></div><label class="field">WhatsApp<input name="phone" type="tel" maxlength="24" placeholder="Contoh: 081234567890"><small>Wajib jika detail dikirim melalui WhatsApp.</small></label><label class="field">Kirim detail melalui<select name="channel" id="checkoutChannel"><option value="email">Email</option><option value="whatsapp">WhatsApp</option></select></label><label class="field">Catatan untuk admin <small>Opsional</small><textarea name="customerNote" maxlength="800" placeholder="Contoh: mohon proses untuk region Indonesia atau informasi tambahan lainnya."></textarea></label></section>
       </div>
-      <aside class="panel checkout-summary-card"><div class="section-label">RINGKASAN PESANAN</div><div class="summary-product"><div class="summary-cover thumb-summary">${productThumb(p,'summary-thumb')}</div><div><strong>${esc(p.name)}</strong><span>${esc(p.duration)}</span></div></div><label class="field">Jumlah<select name="quantity" id="checkoutQuantity">${qtyOptions}</select></label><div class="summary-row"><span>Harga satuan</span><strong>${money(p.price)}</strong></div><div class="summary-row"><span>Biaya layanan Uply</span><strong>Rp0</strong></div><div class="summary-row total"><span>Total pembayaran</span><strong id="checkoutTotal">${money(Number(p.price)*initialQty)}</strong></div><label class="check"><input type="checkbox" name="agree" required> Saya sudah memeriksa detail kontak dan menyetujui ketentuan produk.</label><div id="checkoutError" class="form-inline-error" hidden></div><button class="btn full checkout-submit" type="submit" ${(manual&&!banksAvailable)||(!manual&&!paymentReady)?'disabled':''}>${manual?'Buat Pesanan':'Lanjut ke Pembayaran'} →</button><p class="tiny center">Pesanan dibuat setelah tombol ini ditekan.</p></aside>
+      <aside class="panel checkout-summary-card"><div class="section-label">RINGKASAN PESANAN</div><div class="summary-product"><div class="summary-cover thumb-summary">${productThumb(p,'summary-thumb')}</div><div><strong>${esc(p.name)}</strong><span>${esc(p.duration)}</span></div></div><label class="field">Jumlah<select name="quantity" id="checkoutQuantity">${qtyOptions}</select></label><div class="summary-row"><span>Subtotal</span><strong id="checkoutSubtotal">${money(subtotal)}</strong></div><div class="summary-row discount-row" id="checkoutDiscountRow" ${discount?'':'hidden'}><span>Voucher</span><strong id="checkoutDiscount">-${money(discount)}</strong></div><div class="summary-row" id="checkoutBalanceRow" hidden><span>Saldo Uply</span><strong id="checkoutBalanceUsed">-Rp0</strong></div><div class="summary-row total"><span>Total pembayaran</span><strong id="checkoutTotal">${money(Math.max(0,subtotal-discount))}</strong></div><label class="check"><input type="checkbox" name="agree" required> Saya sudah memeriksa detail kontak dan menyetujui ketentuan produk.</label><div id="checkoutError" class="form-inline-error" hidden></div><button class="btn full checkout-submit" type="submit" ${!externalReady?'disabled':''}>Lanjut ke Pembayaran →</button><p class="tiny center">Diskon dan saldo dihitung ulang oleh server sebelum order dibuat.</p></aside>
     </form>
   </div></section>`;
 }
 
-function memberStatusHTML(completedCount, spent){
-  const tier=completedCount>=10?{name:'Reseller',next:'Level tertinggi',pct:100,desc:'Cocok untuk pelanggan dengan transaksi rutin dan kebutuhan lebih besar.'}:completedCount>=3?{name:'Member',next:`${10-completedCount} order lagi menuju Reseller`,pct:Math.min(90,30+completedCount*6),desc:'Benefit pelanggan aktif dan akses transaksi yang lebih praktis.'}:{name:'Explorer',next:`${Math.max(0,3-completedCount)} order lagi menuju Member`,pct:Math.min(28,completedCount*9),desc:'Level awal untuk pelanggan Uply Digital.'};
-  return `<div class="member-card" id="memberStatus"><div class="member-top"><div><span class="section-kicker">Status Member</span><h2>${tier.name}</h2><p>${tier.desc}</p></div><span class="member-badge">★ ${tier.name}</span></div><div class="member-progress"><div><span style="width:${tier.pct}%"></span></div><small>${tier.next}</small></div><div class="member-benefits"><span><b>Explorer</b><small>Belanja untuk kebutuhan pribadi</small></span><span class="${tier.name==='Member'||tier.name==='Reseller'?'active':''}"><b>Member</b><small>Untuk pelanggan aktif</small></span><span class="${tier.name==='Reseller'?'active':''}"><b>Reseller</b><small>Untuk transaksi rutin & skala lebih besar</small></span></div></div>`;
+function checkoutRecalc(){
+  const form=$('#checkoutForm'); if(!form)return;
+  const p=state.catalog?.products?.find(x=>x.id===form.dataset.productId);if(!p)return;
+  const qty=Number(form.elements.quantity?.value||1),subtotal=Number(p.price)*qty;
+  const discount=(state.appliedVoucher?.productId===p.id&&Number(state.appliedVoucher.qty)===qty)?Number(state.appliedVoucher.discount||0):0;
+  const after=Math.max(0,subtotal-discount),useBalance=!!form.elements.useBalance?.checked,balanceUsed=useBalance?Math.min(Number(state.user?.balance||0),after):0,total=Math.max(0,after-balanceUsed);
+  if($('#checkoutSubtotal')) $('#checkoutSubtotal').textContent=money(subtotal);
+  if($('#checkoutDiscountRow')) $('#checkoutDiscountRow').hidden=!discount;
+  if($('#checkoutDiscount')) $('#checkoutDiscount').textContent='-'+money(discount);
+  if($('#checkoutBalanceRow')) $('#checkoutBalanceRow').hidden=!balanceUsed;
+  if($('#checkoutBalanceUsed')) $('#checkoutBalanceUsed').textContent='-'+money(balanceUsed);
+  if($('#checkoutTotal')) $('#checkoutTotal').textContent=money(total);
+  const submit=form.querySelector('.checkout-submit'); const external=!!form.querySelector('input[name="paymentMethod"]:checked'); if(submit) submit.disabled=total>0&&!external;
+}
+
+function togglePaymentPanels(){
+  const selected=document.querySelector('#checkoutForm input[name="paymentMethod"]:checked')?.value||'';
+  document.querySelectorAll('[data-pay-panel]').forEach(el=>el.hidden=el.dataset.payPanel!==selected);
+}
+
+function memberStatusHTML(completedCount, spent, currentTier='customer'){
+  const map={customer:{name:'Customer',pct:Math.min(28,completedCount*9),next:`${Math.max(0,3-completedCount)} order lagi menuju Member`,desc:'Level awal pelanggan Uply Digital.'},member:{name:'Member',pct:55,next:`${Math.max(0,10-completedCount)} order lagi menuju Reseller`,desc:'Benefit untuk pelanggan aktif.'},reseller:{name:'Reseller',pct:82,next:`${Math.max(0,30-completedCount)} order lagi menuju VIP`,desc:'Level untuk transaksi rutin dan kebutuhan lebih besar.'},vip:{name:'VIP',pct:100,next:'Level tertinggi',desc:'Level pelanggan dengan aktivitas tertinggi.'}};
+  const tier=map[currentTier]||map.customer;
+  return `<div class="member-card" id="memberStatus"><div class="member-top"><div><span class="section-kicker">Role Connector Otomatis</span><h2>${tier.name}</h2><p>${tier.desc}</p></div><span class="member-badge">★ ${tier.name}</span></div><div class="member-progress"><div><span style="width:${tier.pct}%"></span></div><small>${tier.next}</small></div><div class="member-benefits"><span class="${['customer','member','reseller','vip'].includes(currentTier)?'active':''}"><b>Customer</b><small>Mulai belanja</small></span><span class="${['member','reseller','vip'].includes(currentTier)?'active':''}"><b>Member</b><small>3+ order / Rp250rb</small></span><span class="${['reseller','vip'].includes(currentTier)?'active':''}"><b>Reseller</b><small>10+ order / Rp1jt</small></span><span class="${currentTier==='vip'?'active':''}"><b>VIP</b><small>30+ order / Rp3jt</small></span></div></div>`;
 }
 
 function customerDashboard(){
   if(!state.user || state.user.role!=='user') return `<section class="page customer-shell"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Dashboard Pelanggan</div><h1>Masuk untuk melihat akunmu</h1><p>Pantau transaksi, pesanan, dan status pembelian dari satu tempat.</p></div><div class="panel" style="max-width:520px"><button class="btn full" data-open-login>Masuk pelanggan</button></div></div></section>`;
   const completed=state.orders.filter(o=>o.status==='completed');
   const active=state.orders.filter(o=>['pending_payment','review','processing'].includes(o.status));
-  const spent=completed.reduce((n,o)=>n+Number(o.total||0),0);
+  const spent=completed.reduce((n,o)=>n+Number(o.subtotal||o.total||0)-Number(o.discount||0),0);
   const recent=state.orders.slice(0,6);
   return `<section class="page customer-shell"><div class="wrap customer-layout">
     <aside class="customer-sidebar">
@@ -333,8 +413,8 @@ function customerDashboard(){
     </aside>
     <div class="customer-main">
       <div class="customer-welcome"><div><div class="section-kicker">Akun Pelanggan</div><h1>Halo, ${esc(state.user.name.split(' ')[0])} 👋</h1><p>Selamat datang kembali di Uply Digital.</p></div><button class="btn light small" type="button" data-scroll-products>Belanja Sekarang</button></div>
-      <div class="customer-stats"><article><span>Total transaksi</span><strong>${state.orders.length}</strong><small>${active.length} masih berjalan</small></article><article><span>Pesanan selesai</span><strong>${completed.length}</strong><small>Produk berhasil diterima</small></article><article><span>Total belanja selesai</span><strong>${money(spent)}</strong><small>Akumulasi order selesai</small></article></div>
-      ${memberStatusHTML(completed.length,spent)}
+      <div class="customer-stats four"><article><span>Saldo Uply</span><strong>${money(state.user.balance||0)}</strong><small>Bisa dipakai saat checkout</small></article><article><span>Total transaksi</span><strong>${state.orders.length}</strong><small>${active.length} masih berjalan</small></article><article><span>Pesanan selesai</span><strong>${completed.length}</strong><small>Produk berhasil diterima</small></article><article><span>Total belanja selesai</span><strong>${money(spent)}</strong><small>Akumulasi order selesai</small></article></div>
+      ${memberStatusHTML(completed.length,spent,state.user.membershipTier||'customer')}
       <div class="panel customer-orders-panel"><div class="panel-title"><div><h2>Order terbaru</h2><p>Riwayat transaksi terakhir akunmu.</p></div><a class="text-btn" href="#pesanan">Lihat semua</a></div>${recent.length?`<div class="customer-order-table">${recent.map(o=>`<a class="customer-order-row" href="#pesanan/${encodeURIComponent(o.id)}"><div><small>${esc(o.id)}</small><strong>${esc(o.productName)}</strong><span>${dt(o.createdAt)}</span></div><div><strong>${money(o.total)}</strong>${status(o.status)}</div><b>›</b></a>`).join('')}</div>`:`<div class="empty compact"><p>Belum ada pesanan.</p><button class="btn small" data-scroll-products>Mulai belanja</button></div>`}</div>
     </div>
   </div></section>`;
@@ -358,9 +438,11 @@ function invoiceChip(ps){ return `<span class="status ${esc(ps.cls)}">${esc(ps.l
 function invoiceDate(v){ return v ? dt(v) : '—'; }
 function paymentMethod(o){
   if(o.paymentMode==='midtrans') return `Midtrans${o.paymentData?.method?' · '+o.paymentData.method:''}`;
+  if(o.paymentMode==='qris_manual') return 'QRIS Manual';
+  if(o.paymentMode==='balance') return 'Saldo Uply';
   if(o.paymentMode==='xendit') return 'Xendit (order lama)';
   if(o.bank?.name) return `Transfer ${o.bank.name}`;
-  return 'Transfer bank';
+  return o.paymentMode||'Transfer bank';
 }
 function invoiceVisible(o){
   return !!(o.paymentSubmittedAt || o.paymentVerifiedAt || o.hasProof || ['review','processing','completed'].includes(o.status));
@@ -382,8 +464,8 @@ function invoiceHTML(o){
       <div class="${o.processingAt||o.status==='completed'?'done':''}"><b>3</b><span><strong>Diproses</strong><small>${esc(invoiceDate(o.processingAt))}</small></span></div>
       <div class="${o.completedAt||o.status==='completed'?'done':''}"><b>4</b><span><strong>Selesai</strong><small>${esc(invoiceDate(o.completedAt))}</small></span></div>
     </div>
-    <div class="invoice-customer"><div><span>Ditagihkan kepada</span><strong>${esc(o.name)}</strong><small>${esc(o.email)}${o.phone?` · ${esc(o.phone)}`:''}</small></div>${o.bank?`<div><span>Rekening tujuan</span><strong>${esc(o.bank.name)}</strong><small>${esc(o.bank.number)} · ${esc(o.bank.holder)}</small></div>`:''}</div>
-    <div class="invoice-table-wrap"><table class="invoice-table"><thead><tr><th>Produk</th><th>Harga</th><th>Qty</th><th>Subtotal</th></tr></thead><tbody><tr><td><div class="invoice-product-cell">${productThumb(o,'invoice-product-thumb')}<span><strong>${esc(o.productName)}</strong><small>${esc(o.duration)}</small></span></div></td><td>${money(o.price)}</td><td>${o.quantity}</td><td>${money(o.total)}</td></tr></tbody><tfoot><tr><td colspan="3">Total pembayaran</td><td>${money(o.total)}</td></tr></tfoot></table></div>
+    <div class="invoice-customer"><div><span>Ditagihkan kepada</span><strong>${esc(o.name)}</strong><small>${esc(o.email)}${o.phone?` · ${esc(o.phone)}`:''}</small></div>${o.bank?`<div><span>Rekening tujuan</span><strong>${esc(o.bank.name)}</strong><small>${esc(o.bank.number)} · ${esc(o.bank.holder)}</small></div>`:''}${o.paymentMode==='qris_manual'?`<div><span>QRIS</span><strong>${esc(state.catalog?.settings?.qrisName||'QRIS Manual')}</strong><small>Verifikasi manual oleh admin</small></div>`:''}</div>
+    <div class="invoice-table-wrap"><table class="invoice-table"><thead><tr><th>Produk</th><th>Harga</th><th>Qty</th><th>Subtotal</th></tr></thead><tbody><tr><td><div class="invoice-product-cell">${productThumb(o,'invoice-product-thumb')}<span><strong>${esc(o.productName)}</strong><small>${esc(o.duration)}</small></span></div></td><td>${money(o.price)}</td><td>${o.quantity}</td><td>${money(o.subtotal||o.price*o.quantity)}</td></tr></tbody><tfoot>${o.discount?`<tr><td colspan="3">Voucher ${esc(o.voucherCode||'')}</td><td>-${money(o.discount)}</td></tr>`:''}${o.balanceUsed?`<tr><td colspan="3">Saldo Uply</td><td>-${money(o.balanceUsed)}</td></tr>`:''}<tr><td colspan="3">Total pembayaran</td><td>${money(o.total)}</td></tr></tfoot></table></div>
     <p class="invoice-footnote">Invoice ini mengikuti status pesanan terbaru. Simpan nomor invoice untuk bantuan pelanggan.</p>
   </div>`;
 }
@@ -404,51 +486,71 @@ function orderDetail(id){
   if(o.status==='pending_payment' && o.paymentMode==='manual' && o.bank){
     pay=`<div class="panel"><h2>Pembayaran transfer</h2><div class="bank"><strong>${esc(o.bank.name)}</strong><div class="bank-number">${esc(o.bank.number)}</div><span>Atas nama ${esc(o.bank.holder)}</span></div><p>Total transfer: <strong>${money(o.total)}</strong></p><form id="proofForm" data-order="${esc(o.id)}"><label class="field">Bukti transfer (JPG/PNG/PDF maksimal ±1MB)<input type="file" name="proof" accept="image/jpeg,image/png,application/pdf" required></label><button class="btn" type="submit">Unggah bukti</button></form></div>`;
   }
+  if(o.status==='pending_payment' && o.paymentMode==='qris_manual'){
+    pay=`<div class="panel"><h2>Pembayaran QRIS Manual</h2><div class="qris-order-pay"><img src="/api/qris-image?v=${Date.now()}" alt="QRIS"><div><strong>${esc(state.catalog?.settings?.qrisName||'QRIS Manual')}</strong><p>Scan QRIS lalu bayar tepat <b>${money(o.total)}</b>.</p><small>Setelah bayar, upload bukti agar admin dapat memverifikasi.</small></div></div><form id="proofForm" data-order="${esc(o.id)}"><label class="field">Bukti pembayaran (JPG/PNG/PDF maksimal ±1MB)<input type="file" name="proof" accept="image/jpeg,image/png,application/pdf" required></label><button class="btn" type="submit">Unggah bukti</button></form></div>`;
+  }
   if(o.status==='pending_payment' && o.paymentMode==='midtrans'){
     const pd=o.paymentData||{};
     const instruction=pd.paymentUrl?`<a class="btn full" href="${esc(pd.paymentUrl)}" rel="noopener">Bayar aman melalui Midtrans →</a><p class="tiny center">Metode pembayaran yang aktif di akun Midtrans akan tampil di halaman Snap Checkout.</p>`:'';
     pay=`<div class="panel"><h2>Pembayaran otomatis · Midtrans</h2><p>Status gateway: <strong>${esc(o.gatewayStatus||'belum dibuat')}</strong></p>${instruction}<div class="button-row">${!instruction?`<button class="btn" data-pay="${esc(o.id)}">Buat pembayaran</button>`:''}<button class="btn light" data-sync-pay="${esc(o.id)}">↻ Cek status pembayaran</button></div>${pd.transactionId?`<p class="tiny">ID transaksi: ${esc(pd.transactionId)}</p>`:''}<p class="tiny">Jika pembayaran sudah dilakukan tetapi status belum berubah, gunakan Cek status pembayaran.</p></div>`;
   }
   if(o.status==='pending_payment' && o.paymentMode==='xendit'){
-    pay=`<div class="notice warn"><strong>Order gateway versi lama.</strong><br>V20 sudah menggunakan Midtrans. Jangan lanjutkan link Xendit lama. Batalkan order ini lalu buat order baru agar pembayaran dibuat melalui Midtrans.</div>`;
+    pay=`<div class="notice warn"><strong>Order gateway versi lama.</strong><br>V25 menggunakan sistem pembayaran yang aktif pada konfigurasi toko. Jangan lanjutkan link gateway lama. Batalkan order ini lalu buat order baru agar pembayaran dibuat melalui Midtrans.</div>`;
   }
   const invoice=invoiceVisible(o)?invoiceHTML(o):'';
   const progressNotice=o.status==='review'?`<div class="notice ok"><strong>Bukti pembayaran sudah diterima.</strong><br>Invoice sementara sudah tersedia dan akan diperbarui setelah admin memverifikasi pembayaran.</div>`:o.status==='processing'?`<div class="notice ok"><strong>Pembayaran terverifikasi.</strong><br>Pesanan sedang diproses. Invoice sudah diperbarui otomatis.</div>`:o.status==='completed'?`<div class="notice ok"><strong>Pesanan selesai.</strong><br>Invoice final dan detail produk sudah tersedia di bawah.</div>`:'';
-  return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">${esc(o.id)}</div><h1>${esc(o.productName)}</h1><p>${dt(o.createdAt)} · ${status(o.status)}</p></div>${progressNotice}<div class="two"><div class="stack">${pay}${o.note?`<div class="notice">${esc(o.note)}</div>`:''}${o.status==='completed'?`<div class="panel"><h2>Detail produk</h2><pre class="delivery">${esc(o.delivery)}</pre></div>`:''}</div><aside class="panel"><h2>Ringkasan</h2><p>${esc(o.duration)} · ${o.quantity} produk</p><div class="price">${money(o.total)}</div><p class="tiny">Penerima: ${esc(o.name)}<br>${esc(o.email)}${o.phone?`<br>${esc(o.phone)}`:''}</p>${o.status==='pending_payment'?`<button class="btn danger small" data-cancel="${esc(o.id)}">Batalkan pesanan</button>`:''}</aside></div>${invoice}</div></section>`;
+  return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">${esc(o.id)}</div><h1>${esc(o.productName)}</h1><p>${dt(o.createdAt)} · ${status(o.status)}</p></div>${progressNotice}<div class="two"><div class="stack">${pay}${o.note?`<div class="notice">${esc(o.note)}</div>`:''}${o.status==='completed'?`<div class="panel"><h2>Detail produk</h2><pre class="delivery">${esc(o.delivery)}</pre></div>`:''}</div><aside class="panel"><h2>Ringkasan</h2><p>${esc(o.duration)} · ${o.quantity} produk</p><div class="order-breakdown"><span>Subtotal <b>${money(o.subtotal||o.price*o.quantity)}</b></span>${o.discount?`<span>Voucher ${esc(o.voucherCode||'')} <b>-${money(o.discount)}</b></span>`:''}${o.balanceUsed?`<span>Saldo Uply <b>-${money(o.balanceUsed)}</b></span>`:''}</div><div class="price">${money(o.total)}</div><p class="tiny">Penerima: ${esc(o.name)}<br>${esc(o.email)}${o.phone?`<br>${esc(o.phone)}`:''}</p>${o.status==='pending_payment'?`<button class="btn danger small" data-cancel="${esc(o.id)}">Batalkan pesanan</button>`:''}</aside></div>${invoice}</div></section>`;
 }
 
 async function adminPage(){
   if(!state.user || state.user.role!=='admin') return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Panel Admin</div><h1>Kelola Uply Digital</h1><p>Masuk menggunakan email dan password admin dari Vercel Environment Variables.</p></div><div class="panel" style="max-width:520px">${loginForm(true)}</div></div></section>`;
   state.admin = await api('adminData');
-  const tabs = [['overview','Ringkasan'],['orders','Pesanan'],['products','Produk'],['inventory','Inventory'],['customers','Pelanggan'],['settings','Pengaturan'],['audit','Aktivitas']];
+  const tabs = [['overview','Ringkasan'],['orders','Pesanan'],['products','Produk'],['inventory','Inventory'],['vouchers','Voucher'],['balance','Saldo'],['customers','Pelanggan'],['reports','Laporan'],['settings','Pembayaran & Toko'],['docs','Dokumentasi'],['audit','Aktivitas']];
   return `<section class="page admin-page"><div class="wrap"><div class="page-head admin-title-row"><div><div class="eyebrow dark">Panel Admin</div><h1>Ruang kelola toko</h1><p>${esc(state.admin.admin.email)} · pembayaran <strong>${esc(state.admin.settings.paymentMode)}</strong></p></div><div class="admin-head-actions"><button class="btn light small" data-admin-refresh>↻ Perbarui</button><a class="btn small" href="#katalog">Lihat toko</a></div></div><div class="admin-layout"><aside class="admin-nav">${tabs.map(([id,l])=>`<button data-admin-tab="${id}" class="${state.adminTab===id?'active':''}">${l}</button>`).join('')}</aside><div id="adminContent">${adminContent()}</div></div></div></section>`;
 }
 
 function lowStockProducts(d){
   return d.products.filter(p => {
     if(!p.active) return false;
-    if(p.fulfillmentMode==='inventory') return Number(p.stock) <= 2;
-    return Number(p.stock) !== -1 && Number(p.stock) <= 3;
+    const threshold=Number(p.lowStockThreshold||3);
+    if(p.fulfillmentMode==='inventory') return Number(p.stock) <= threshold;
+    return Number(p.stock) !== -1 && Number(p.stock) <= threshold;
   });
 }
 
 function ordersTable(orders){
   if(!orders.length) return `<div class="empty panel">Tidak ada pesanan pada filter ini.</div>`;
-  return `<div class="table-wrap"><table><thead><tr><th>Pesanan</th><th>Pelanggan</th><th>Produk</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody>${orders.map(o=>`<tr><td><strong>${esc(o.id)}</strong><br><span class="tiny">${dt(o.createdAt)}</span></td><td>${esc(o.name)}<br><span class="tiny">${esc(o.email)}</span></td><td>${esc(o.productName)}<br><span class="tiny">${esc(o.duration)} · ${o.quantity}</span></td><td><strong>${money(o.total)}</strong></td><td>${status(o.status)}</td><td><button class="text-btn" data-admin-order="${esc(o.id)}">Buka</button></td></tr>`).join('')}</tbody></table></div>`;
+  const rows=orders.map(o=>`<tr><td><strong>${esc(o.id)}</strong><br><span class="tiny">${dt(o.createdAt)}</span></td><td>${esc(o.name)}<br><span class="tiny">${esc(o.email)}</span></td><td>${esc(o.productName)}<br><span class="tiny">${esc(o.duration)} · ${o.quantity}</span></td><td><strong>${money(o.total)}</strong></td><td>${status(o.status)}</td><td><button class="text-btn admin-open-order" data-admin-order="${esc(o.id)}">Buka</button></td></tr>`).join('');
+  const cards=orders.map(o=>`<article class="admin-order-card">
+    <div class="admin-order-card-top"><span><small>${dt(o.createdAt)}</small><strong>${esc(o.id)}</strong></span>${status(o.status)}</div>
+    <div class="admin-order-card-body"><div><small>Pelanggan</small><strong>${esc(o.name)}</strong><span>${esc(o.email)}</span></div><div><small>Produk</small><strong>${esc(o.productName)}</strong><span>${esc(o.duration)} · ${o.quantity}</span></div></div>
+    <div class="admin-order-card-foot"><strong>${money(o.total)}</strong><button class="btn small admin-card-action" data-admin-order="${esc(o.id)}">${['review','pending_payment','processing'].includes(o.status)?'Periksa & proses':'Lihat detail'} →</button></div>
+  </article>`).join('');
+  return `<div class="admin-orders-desktop table-wrap"><table><thead><tr><th>Pesanan</th><th>Pelanggan</th><th>Produk</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div><div class="admin-orders-mobile">${cards}</div>`;
 }
 
 function adminContent(){
   const d = state.admin;
   if(state.adminTab==='overview'){
-    const rev = d.orders.filter(o=>['processing','completed'].includes(o.status)).reduce((a,o)=>a+o.total,0);
+    const rev = d.orders.filter(o=>['processing','completed'].includes(o.status)).reduce((a,o)=>a+Number(o.subtotal||o.total||0)-Number(o.discount||0),0);
+    const todayKey=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta'}).format(new Date());
+    const today=d.analytics?.daily?.find(x=>x.day===todayKey)||{orders:0,revenue:0};
     const availableInventory = Object.values(d.inventory||{}).reduce((n,x)=>n+Number(x.available||0),0);
     const low = lowStockProducts(d);
-    const paidCount=d.orders.filter(o=>['processing','completed'].includes(o.status)).length, completedCount=d.orders.filter(o=>o.status==='completed').length; const payRate=d.orders.length?Math.round(paidCount/d.orders.length*100):0, completeRate=d.orders.length?Math.round(completedCount/d.orders.length*100):0;
-    return `<div class="stats six"><div class="stat"><span class="tiny">Omzet terverifikasi</span><strong>${money(rev)}</strong></div><div class="stat"><span class="tiny">Perlu dicek</span><strong>${d.orders.filter(o=>o.status==='review').length}</strong></div><div class="stat"><span class="tiny">Total pesanan</span><strong>${d.orders.length}</strong></div><div class="stat"><span class="tiny">Pelanggan</span><strong>${d.customers.length}</strong></div><div class="stat"><span class="tiny">Produk aktif</span><strong>${d.products.filter(p=>p.active).length}</strong></div><div class="stat"><span class="tiny">Inventory tersedia</span><strong>${availableInventory}</strong></div></div><div class="panel funnel-panel"><div class="panel-title"><div><h2>Funnel pesanan</h2><p>Ringkasan konversi order sampai selesai.</p></div></div><div class="funnel-grid"><span><b>${d.orders.length}</b><small>Order dibuat</small></span><span><b>${paidCount}</b><small>Pembayaran terverifikasi · ${payRate}%</small></span><span><b>${completedCount}</b><small>Selesai · ${completeRate}%</small></span></div></div>
-    <div class="admin-grid-2"><div class="panel"><div class="toolbar"><div><h2>Quick actions</h2><p class="tiny">Akses tugas yang paling sering dipakai.</p></div></div><div class="quick-actions"><button class="quick" data-quick="add-product"><b>＋</b><span>Tambah produk<small>Buat produk baru</small></span></button><button class="quick" data-quick="inventory"><b>▣</b><span>Tambah inventory<small>Input satu per satu</small></span></button><button class="quick" data-quick="review"><b>✓</b><span>Cek pembayaran<small>${d.orders.filter(o=>o.status==='review').length} perlu dicek</small></span></button><button class="quick" data-quick="settings"><b>⚙</b><span>Pengaturan toko<small>Bank & status toko</small></span></button></div></div>
-    <div class="panel"><div class="toolbar"><div><h2>Alert stok</h2><p class="tiny">Produk yang perlu perhatian.</p></div><button class="text-btn" data-admin-tab="inventory">Buka inventory</button></div>${low.length?`<div class="alert-list">${low.slice(0,8).map(p=>`<div><span><strong>${esc(p.name)}</strong><small>${p.fulfillmentMode==='inventory'?'Inventory otomatis':'Stok manual'}</small></span><b>${p.stock===0?'Habis':`Sisa ${p.stock}`}</b></div>`).join('')}</div>`:`<div class="notice ok">Semua stok dalam kondisi aman.</div>`}</div></div>
-    <div class="toolbar section-toolbar"><div><h2>Pesanan terbaru</h2><p class="tiny">Aktivitas order terbaru dari pelanggan.</p></div><button class="text-btn" data-admin-tab="orders">Lihat semua</button></div>${ordersTable(d.orders.slice(0,8))}
-    <div class="toolbar section-toolbar"><div><h2>Aktivitas terbaru</h2><p class="tiny">Perubahan penting di toko.</p></div><button class="text-btn" data-admin-tab="audit">Lihat semua</button></div><div class="activity-list">${d.audit.slice(0,8).map(a=>`<div><span class="activity-dot"></span><div><strong>${esc(a.action.replaceAll('_',' '))}</strong><p>${esc(a.actor)}${a.record_id?` · ${esc(a.record_id)}`:''}</p></div><time>${dt(a.timestamp)}</time></div>`).join('')||'<div class="empty">Belum ada aktivitas.</div>'}</div>`;
+    const paidCount=d.orders.filter(o=>['processing','completed'].includes(o.status)).length, completedCount=d.orders.filter(o=>o.status==='completed').length;
+    const payRate=d.orders.length?Math.round(paidCount/d.orders.length*100):0, completeRate=d.orders.length?Math.round(completedCount/d.orders.length*100):0;
+    const unread=(d.notifications||[]).filter(n=>!n.is_read);
+    const maxDaily=Math.max(1,...(d.analytics?.daily||[]).map(x=>Number(x.revenue||0)));
+    const chart=(d.analytics?.daily||[]).slice(-14).map(x=>`<div class="mini-bar-col"><i style="height:${Math.max(5,Math.round(Number(x.revenue||0)/maxDaily*100))}%"></i><small>${x.day.slice(5)}</small><b>${money(x.revenue)}</b></div>`).join('');
+    return `<div class="stats business-kpis"><div class="stat"><span class="tiny">Omzet terverifikasi</span><strong>${money(rev)}</strong><small>Semua transaksi dibayar</small></div><div class="stat"><span class="tiny">Omzet hari ini</span><strong>${money(today.revenue)}</strong><small>${today.orders} order dibuat</small></div><div class="stat"><span class="tiny">Perlu dicek</span><strong>${d.orders.filter(o=>o.status==='review').length}</strong><small>Bukti/manual payment</small></div><div class="stat"><span class="tiny">Pelanggan</span><strong>${d.customers.length}</strong><small>${d.customers.filter(c=>['reseller','vip'].includes(c.membershipTier)).length} reseller/VIP</small></div><div class="stat"><span class="tiny">Stok menipis</span><strong>${low.length}</strong><small>${availableInventory} inventory siap kirim</small></div><div class="stat"><span class="tiny">Notifikasi</span><strong>${unread.length}</strong><small>Belum dibaca</small></div></div>
+    <div class="panel funnel-panel"><div class="panel-title"><div><h2>Funnel & Konversi</h2><p>Order dibuat → pembayaran terverifikasi → selesai.</p></div><button class="text-btn" data-admin-tab="reports">Buka laporan</button></div><div class="funnel-grid"><span><b>${d.orders.length}</b><small>Order dibuat</small></span><span><b>${paidCount}</b><small>Pembayaran terverifikasi · ${payRate}%</small></span><span><b>${completedCount}</b><small>Selesai · ${completeRate}%</small></span></div></div>
+    <div class="admin-grid-2"><div class="panel"><div class="panel-title"><div><h2>Omzet 14 hari</h2><p>Auto recap berdasarkan transaksi terverifikasi.</p></div></div><div class="mini-bar-chart">${chart||'<div class="empty compact">Belum ada data penjualan.</div>'}</div></div>
+    <div class="panel"><div class="panel-title"><div><h2>Produk terlaris</h2><p>Ranking berdasarkan omzet order selesai.</p></div></div><div class="rank-list">${(d.analytics?.topProducts||[]).slice(0,6).map((x,i)=>`<div><b>${i+1}</b><span><strong>${esc(x.name||x.product_id)}</strong><small>${x.units} unit · ${x.completed} order</small></span><em>${money(x.revenue)}</em></div>`).join('')||'<div class="empty compact">Belum ada penjualan selesai.</div>'}</div></div></div>
+    <div class="admin-grid-2"><div class="panel"><div class="toolbar"><div><h2>Quick actions</h2><p class="tiny">Akses tugas operasional utama.</p></div></div><div class="quick-actions"><button class="quick" data-quick="add-product"><b>＋</b><span>Tambah produk<small>Buat produk baru</small></span></button><button class="quick" data-quick="inventory"><b>▣</b><span>Tambah inventory<small>Siapkan auto delivery</small></span></button><button class="quick" data-quick="review"><b>✓</b><span>Cek pembayaran<small>${d.orders.filter(o=>o.status==='review').length} perlu dicek</small></span></button><button class="quick" data-admin-tab="vouchers"><b>🎟</b><span>Kelola voucher<small>${d.vouchers?.filter(v=>v.active).length||0} aktif</small></span></button></div></div>
+    <div class="panel"><div class="toolbar"><div><h2>Notification Center</h2><p class="tiny">Order, pembayaran, dan stok yang perlu perhatian.</p></div>${unread.length?'<button class="text-btn" data-read-notifications>Baca semua</button>':''}</div><div class="notification-list">${(d.notifications||[]).slice(0,8).map(n=>`<div class="notification-item ${n.is_read?'read':''}"><span class="notif-dot"></span><div><strong>${esc(n.title)}</strong><p>${esc(n.message||'')}</p><small>${dt(n.created_at)}</small></div></div>`).join('')||'<div class="empty compact">Belum ada notifikasi.</div>'}</div></div></div>
+    <div class="admin-grid-2"><div class="panel"><div class="toolbar"><div><h2>Alert stok</h2><p class="tiny">Smart stock management menggunakan threshold per produk.</p></div><button class="text-btn" data-admin-tab="inventory">Buka inventory</button></div>${low.length?`<div class="alert-list">${low.slice(0,8).map(p=>`<div><span><strong>${esc(p.name)}</strong><small>${p.fulfillmentMode==='inventory'?'Inventory otomatis':'Stok manual'} · batas ${p.lowStockThreshold||3}</small></span><b>${p.stock===0?'Habis':`Sisa ${p.stock}`}</b></div>`).join('')}</div>`:`<div class="notice ok">Semua stok dalam kondisi aman.</div>`}</div>
+    <div class="panel"><div class="panel-title"><div><h2>Payment mix</h2><p>Ringkasan penggunaan metode pembayaran.</p></div></div><div class="payment-mix-list">${(d.analytics?.paymentMix||[]).map(x=>`<div><span><b>${esc(x.payment_mode||'manual')}</b><small>${x.orders} order</small></span><strong>${money(x.revenue)}</strong></div>`).join('')||'<div class="empty compact">Belum ada transaksi.</div>'}</div></div></div>
+    <div class="toolbar section-toolbar"><div><h2>Pesanan terbaru</h2><p class="tiny">Aktivitas order terbaru dari pelanggan.</p></div><button class="text-btn" data-admin-tab="orders">Lihat semua</button></div>${ordersTable(d.orders.slice(0,8))}`;
   }
 
   if(state.adminTab==='orders'){
@@ -476,23 +578,56 @@ kode-003"></textarea></label><button class="btn light" type="submit">Import daft
     <div class="table-wrap"><table><thead><tr><th>Produk</th><th>Item</th><th>Catatan</th><th>Status</th><th>Order</th><th>Ditambahkan</th><th></th></tr></thead><tbody>${items.map(i=>`<tr><td><strong>${esc(i.productName||i.productId)}</strong></td><td><code class="inventory-value">${esc(truncate(i.itemValue,54))}</code><br><button class="text-btn tiny-btn" data-copy="${esc(i.itemValue)}">Salin</button></td><td>${esc(i.note||'—')}</td><td>${inventoryStatus(i.status)}</td><td>${esc(i.orderId||'—')}</td><td>${dt(i.createdAt)}</td><td>${i.status==='delivered'?'<span class="tiny">Terkunci</span>':`<button class="text-btn" data-inventory-toggle="${esc(i.id)}" data-next-status="${i.status==='available'?'disabled':'available'}">${i.status==='available'?'Nonaktifkan':'Aktifkan'}</button>`}</td></tr>`).join('')||'<tr><td colspan="7" class="empty">Belum ada inventory.</td></tr>'}</tbody></table></div>`;
   }
 
+
+  if(state.adminTab==='vouchers'){
+    const active=(d.vouchers||[]).filter(v=>v.active).length;
+    return `<div class="toolbar"><div><h2>Smart Voucher System</h2><p class="tiny">Atur diskon nominal/persen, minimum transaksi, kuota, pelanggan baru, kategori, dan produk tertentu.</p></div><button class="btn small" data-edit-voucher="">Buat voucher</button></div><div class="stats four"><div class="stat"><span class="tiny">Voucher aktif</span><strong>${active}</strong></div><div class="stat"><span class="tiny">Total voucher</span><strong>${d.vouchers?.length||0}</strong></div><div class="stat"><span class="tiny">Pemakaian</span><strong>${(d.vouchers||[]).reduce((n,v)=>n+Number(v.used||0),0)}</strong></div><div class="stat"><span class="tiny">Diskon tercatat</span><strong>${money(d.orders.reduce((n,o)=>n+Number(o.discount||0),0))}</strong></div></div><div class="voucher-admin-grid">${(d.vouchers||[]).map(v=>`<article class="voucher-admin-card ${v.active?'':'disabled'}"><div class="voucher-admin-head"><span><b>${esc(v.code)}</b><small>${esc(v.name||v.code)}</small></span><span class="status ${v.active?'completed':'cancelled'}">${v.active?'Aktif':'Nonaktif'}</span></div><strong>${v.discount_type==='percent'?`${v.discountValue}%`:`${money(v.discountValue)}`} OFF</strong><div class="voucher-meta"><span>Min. ${money(v.minSpend)}</span><span>Maks. ${v.maxDiscount?money(v.maxDiscount):'—'}</span><span>Terpakai ${v.used}${v.usageLimit?` / ${v.usageLimit}`:''}</span><span>Per user ${v.perUserLimit}x</span></div><div class="voucher-actions"><button class="text-btn" data-edit-voucher="${esc(v.code)}">Edit</button><button class="text-btn" data-toggle-voucher="${esc(v.code)}" data-active="${v.active?'false':'true'}">${v.active?'Nonaktifkan':'Aktifkan'}</button></div></article>`).join('')||'<div class="empty panel">Belum ada voucher. Buat voucher pertama untuk promo toko.</div>'}</div>`;
+  }
+
+  if(state.adminTab==='balance'){
+    const totalBalance=(d.customers||[]).reduce((n,c)=>n+Number(c.balance||0),0);
+    return `<div class="toolbar"><div><h2>Balance System</h2><p class="tiny">Saldo internal untuk refund, bonus, cashback, atau pembayaran checkout.</p></div></div><div class="stats four"><div class="stat"><span class="tiny">Saldo beredar</span><strong>${money(totalBalance)}</strong></div><div class="stat"><span class="tiny">Pelanggan bersaldo</span><strong>${d.customers.filter(c=>Number(c.balance)>0).length}</strong></div><div class="stat"><span class="tiny">Mutasi tercatat</span><strong>${d.balanceLedger?.length||0}</strong></div><div class="stat"><span class="tiny">Saldo dipakai order</span><strong>${money(d.orders.reduce((n,o)=>n+Number(o.balanceUsed||0),0))}</strong></div></div><div class="admin-grid-2"><div class="panel"><h2>Saldo pelanggan</h2><div class="balance-customer-list">${d.customers.slice(0,100).map(c=>`<div><span><strong>${esc(c.name)}</strong><small>${esc(c.email)}</small></span><b>${money(c.balance)}</b><button class="btn light small" data-balance-user="${esc(c.id)}">Atur</button></div>`).join('')}</div></div><div class="panel"><h2>Mutasi terbaru</h2><div class="ledger-list">${(d.balanceLedger||[]).slice(0,80).map(l=>`<div><span><strong>${esc(l.name||l.email||l.user_id)}</strong><small>${esc(l.type)} · ${dt(l.created_at)}${l.note?` · ${esc(l.note)}`:''}</small></span><b class="${Number(l.amount)>=0?'plus':'minus'}">${Number(l.amount)>=0?'+':''}${money(l.amount)}</b></div>`).join('')||'<div class="empty compact">Belum ada mutasi saldo.</div>'}</div></div></div>`;
+  }
+
+  if(state.adminTab==='reports'){
+    const completed=d.orders.filter(o=>o.status==='completed');
+    const gross=completed.reduce((n,o)=>n+Number(o.subtotal||o.total||0),0), discounts=completed.reduce((n,o)=>n+Number(o.discount||0),0), net=gross-discounts;
+    return `<div class="toolbar"><div><h2>Reporting System</h2><p class="tiny">Rekap penjualan, produk, pembayaran, voucher, dan status transaksi.</p></div><button class="btn small" data-export-report>Export CSV</button></div><div class="stats four"><div class="stat"><span class="tiny">Gross sales selesai</span><strong>${money(gross)}</strong></div><div class="stat"><span class="tiny">Diskon voucher</span><strong>${money(discounts)}</strong></div><div class="stat"><span class="tiny">Net sales</span><strong>${money(net)}</strong></div><div class="stat"><span class="tiny">Order selesai</span><strong>${completed.length}</strong></div></div><div class="admin-grid-2"><div class="panel"><h2>30 hari terakhir</h2><div class="report-daily-list">${(d.analytics?.daily||[]).slice().reverse().map(x=>`<div><span>${esc(x.day)}</span><span>${x.orders} order</span><strong>${money(x.revenue)}</strong></div>`).join('')||'<div class="empty compact">Belum ada data.</div>'}</div></div><div class="panel"><h2>Produk</h2><div class="rank-list">${(d.analytics?.topProducts||[]).map((x,i)=>`<div><b>${i+1}</b><span><strong>${esc(x.name||x.product_id)}</strong><small>${x.units} unit · ${x.completed} selesai</small></span><em>${money(x.revenue)}</em></div>`).join('')||'<div class="empty compact">Belum ada data.</div>'}</div></div></div><div class="panel"><h2>Payment & Status Recap</h2><div class="report-grid">${(d.analytics?.paymentMix||[]).map(x=>`<div><small>${esc(x.payment_mode)}</small><strong>${x.orders}</strong><span>${money(x.revenue)}</span></div>`).join('')}${Object.entries(statusLabel).map(([k,l])=>`<div><small>${esc(l)}</small><strong>${d.orders.filter(o=>o.status===k).length}</strong><span>order</span></div>`).join('')}</div></div>`;
+  }
+
+  if(state.adminTab==='docs'){
+    return `<div class="toolbar"><div><h2>Dokumentasi Lengkap</h2><p class="tiny">Panduan operasional singkat langsung di Panel Admin.</p></div></div><div class="docs-grid">
+      <details open><summary>1. Proses Pesanan</summary><p><b>Menunggu pembayaran</b> → pelanggan membayar. Manual payment masuk <b>Periksa pembayaran</b>. Setelah dana cocok, admin centang konfirmasi lalu ubah ke <b>Sedang diproses</b>. Setelah detail produk terkirim, ubah ke <b>Selesai</b>.</p></details>
+      <details><summary>2. Auto Delivery</summary><p>Ubah produk ke <b>Inventory Otomatis</b>, lalu isi kode/link satu item per baris di menu Inventory. Setelah pembayaran otomatis terverifikasi, sistem mengambil inventory tersedia dengan lock database dan menyelesaikan pesanan.</p></details>
+      <details><summary>3. Smart Stock</summary><p>Produk manual memakai angka stok. Produk inventory memakai jumlah item tersedia. Atur batas stok menipis pada Edit Produk. Dashboard akan memberi alert saat melewati threshold.</p></details>
+      <details><summary>4. Voucher</summary><p>Buat voucher dari menu Voucher. Atur diskon persen/nominal, minimum transaksi, maksimal diskon, kuota global, limit per user, kategori/produk, tanggal aktif, dan aturan pelanggan baru.</p></details>
+      <details><summary>5. Balance System</summary><p>Admin dapat tambah/kurangi saldo pelanggan. Semua mutasi masuk ledger. Pelanggan dapat memakai saldo pada checkout; jika order dibatalkan sebelum pembayaran, saldo otomatis dikembalikan.</p></details>
+      <details><summary>6. Role Connector</summary><p>Mode otomatis: Customer → Member (3 order/Rp250rb) → Reseller (10 order/Rp1jt) → VIP (30 order/Rp3jt). Admin dapat override manual atau mengembalikan ke mode Auto.</p></details>
+      <details><summary>7. Multi Payment</summary><p>Metode dapat diaktifkan bersamaan: Midtrans otomatis, transfer bank manual, QRIS manual, dan saldo. Midtrans membutuhkan payment channel aktif di merchant. QRIS gambar statis tetap membutuhkan verifikasi admin.</p></details>
+      <details><summary>8. Reporting</summary><p>Menu Laporan berisi gross sales, diskon, net sales, penjualan 30 hari, produk terlaris, payment mix, dan export CSV untuk rekonsiliasi.</p></details>
+      <details><summary>9. Keamanan Top Up</summary><p>Email/password akun pelanggan disimpan terenkripsi dengan CREDENTIAL_ENCRYPTION_KEY. Admin hanya dapat membukanya setelah pembayaran terverifikasi. Jangan pernah meminta OTP, PIN, recovery code, atau kode 2FA.</p></details>
+      <details><summary>10. Backup & Audit</summary><p>Semua perubahan penting masuk menu Aktivitas. Gunakan backup/restore dari Neon untuk database production sebelum perubahan besar atau migrasi.</p></details>
+    </div>`;
+  }
+
   if(state.adminTab==='customers'){
     const needle = state.customerSearch.toLowerCase();
-    const customers = d.customers.filter(c=>`${c.name} ${c.email} ${c.phone||''}`.toLowerCase().includes(needle));
-    return `<div class="toolbar"><div><h2>Pelanggan</h2><p class="tiny">Lihat riwayat singkat pelanggan.</p></div><span class="pill-count">${customers.length} pelanggan</span></div><div class="filter-bar"><input id="customerSearch" class="search" placeholder="Cari nama / email…" value="${esc(state.customerSearch)}"></div><div class="table-wrap"><table><thead><tr><th>Pelanggan</th><th>Kontak</th><th>Order</th><th>Total belanja</th><th>Daftar</th></tr></thead><tbody>${customers.map(c=>`<tr><td><strong>${esc(c.name)}</strong></td><td>${esc(c.email)}<br>${esc(c.phone||'')}</td><td>${c.ordersCount}</td><td>${money(c.spent)}</td><td>${dt(c.created_at)}</td></tr>`).join('')}</tbody></table></div>`;
+    const customers = d.customers.filter(c=>`${c.name} ${c.email} ${c.phone||''} ${c.membershipTier||''}`.toLowerCase().includes(needle));
+    return `<div class="toolbar"><div><h2>Pelanggan & Role Connector</h2><p class="tiny">Kelola saldo, role, dan aktivitas pelanggan.</p></div><span class="pill-count">${customers.length} pelanggan</span></div><div class="filter-bar"><input id="customerSearch" class="search" placeholder="Cari nama / email / role…" value="${esc(state.customerSearch)}"></div><div class="table-wrap"><table><thead><tr><th>Pelanggan</th><th>Role</th><th>Saldo</th><th>Order</th><th>Total belanja</th><th></th></tr></thead><tbody>${customers.map(c=>`<tr><td><strong>${esc(c.name)}</strong><br><span class="tiny">${esc(c.email)}${c.phone?` · ${esc(c.phone)}`:''}</span></td><td><span class="role-chip ${esc(c.membershipTier)}">${esc(c.membershipTier)}</span>${c.membershipManual?'<br><small>manual</small>':'<br><small>otomatis</small>'}</td><td><strong>${money(c.balance)}</strong></td><td>${c.ordersCount}<br><small>${c.completedCount} selesai</small></td><td>${money(c.spent)}</td><td><div class="table-actions"><button class="text-btn" data-balance-user="${esc(c.id)}">Saldo</button><button class="text-btn" data-tier-user="${esc(c.id)}">Role</button></div></td></tr>`).join('')}</tbody></table></div><div class="customer-admin-cards">${customers.map(c=>`<article><div><strong>${esc(c.name)}</strong><small>${esc(c.email)}</small></div><span class="role-chip ${esc(c.membershipTier)}">${esc(c.membershipTier)}</span><div class="customer-mini-stats"><span>Saldo <b>${money(c.balance)}</b></span><span>Order <b>${c.ordersCount}</b></span><span>Belanja <b>${money(c.spent)}</b></span></div><div class="customer-card-actions"><button class="btn light small" data-balance-user="${esc(c.id)}">Atur Saldo</button><button class="btn light small" data-tier-user="${esc(c.id)}">Atur Role</button></div></article>`).join('')}</div>`;
   }
 
   if(state.adminTab==='settings'){
     const s = d.settings;
-    return `<div class="admin-grid-2"><form id="settingsForm" class="panel"><h2>Pengaturan toko</h2><label class="field">Nama toko<input name="storeName" value="${esc(s.storeName||'Uply Digital')}" required></label><label class="field">WhatsApp admin<input name="whatsapp" value="${esc(s.whatsapp||'')}" placeholder="628123456789"></label><label class="field">Jam layanan<input name="hours" value="${esc(s.hours||'')}"></label><label class="field">Batas pembayaran (jam)<input name="paymentHours" type="number" min="1" max="72" value="${Number(s.paymentHours)||24}"></label><label class="field">Pengumuman toko<textarea name="notice">${esc(s.notice||'')}</textarea></label><label class="field">Banner promo homepage<textarea name="promoBanner" maxlength="180" placeholder="Contoh: Promo weekend — cek produk unggulan hari ini!">${esc(s.promoBanner||'')}</textarea></label><label class="check"><input name="storeOpen" type="checkbox" ${s.storeOpen?'checked':''}> Terima pesanan baru</label><button class="btn" type="submit">Simpan pengaturan</button></form><div class="panel"><div class="toolbar"><div><h2>Rekening pembayaran</h2><p class="tiny">Dipakai saat PAYMENT_MODE = manual.</p></div></div>${d.banks.map(b=>`<div class="bank-row"><span><strong>${esc(b.name)}</strong><small>${esc(b.number)} · ${esc(b.holder)}</small></span><button class="text-btn" data-edit-bank="${esc(b.id)}">Edit</button></div>`).join('')}</div></div>`;
+    return `<div class="admin-grid-2"><form id="settingsForm" class="panel"><h2>Pengaturan toko</h2><label class="field">Nama toko<input name="storeName" value="${esc(s.storeName||'Uply Digital')}" required></label><label class="field">WhatsApp admin<input name="whatsapp" value="${esc(s.whatsapp||'')}" placeholder="628123456789"></label><label class="field">Jam layanan<input name="hours" value="${esc(s.hours||'')}"></label><label class="field">Batas pembayaran (jam)<input name="paymentHours" type="number" min="1" max="72" value="${Number(s.paymentHours)||24}"></label><label class="field">Pengumuman toko<textarea name="notice">${esc(s.notice||'')}</textarea></label><label class="field">Banner promo homepage<textarea name="promoBanner" maxlength="180">${esc(s.promoBanner||'')}</textarea></label><div class="setting-switches"><label class="check"><input name="storeOpen" type="checkbox" ${s.storeOpen?'checked':''}> Terima pesanan baru</label><label class="check"><input name="midtransPaymentEnabled" type="checkbox" ${s.midtransPaymentEnabled?'checked':''}> Midtrans otomatis</label><label class="check"><input name="manualPaymentEnabled" type="checkbox" ${s.manualPaymentEnabled?'checked':''}> Transfer / QRIS manual</label><label class="check"><input name="balancePaymentEnabled" type="checkbox" ${s.balancePaymentEnabled?'checked':''}> Pembayaran Saldo Uply</label><label class="check"><input name="autoRoleEnabled" type="checkbox" ${s.autoRoleEnabled?'checked':''}> Role Connector otomatis</label></div><div class="qris-admin-box"><h3>QRIS Manual</h3><label class="field">Nama QRIS<input name="qrisName" value="${esc(s.qrisName||'QRIS Manual')}"></label><label class="field">Upload gambar QRIS<input type="file" name="qrisFile" accept="image/png,image/jpeg,image/webp"><small>Dipakai sebagai pembayaran manual. Status tidak otomatis tanpa API/webhook provider.</small></label>${s.qrisManualReady?`<div class="qris-preview-admin"><img src="/api/qris-image?v=${Date.now()}" alt="QRIS"><label class="check"><input type="checkbox" name="clearQris"> Hapus QRIS tersimpan</label></div>`:''}</div><button class="btn" type="submit">Simpan pengaturan</button></form><div class="stack"><div class="panel"><div class="toolbar"><div><h2>Multi Payment Gateway</h2><p class="tiny">Metode aktif muncul bersamaan di checkout.</p></div></div><div class="payment-health">${(s.paymentMethods||[]).map(m=>`<div><span>${m.id==='midtrans'?'⚡':m.id==='balance'?'💰':m.id==='qris_manual'?'▣':'🏦'}</span><div><strong>${esc(m.label)}</strong><small>${esc(m.type)}</small></div><b>Aktif</b></div>`).join('')||'<div class="notice warn">Belum ada metode pembayaran aktif.</div>'}</div><div class="notice"><strong>Midtrans:</strong> channel seperti QRIS/VA/e-wallet tetap harus aktif di dashboard merchant Midtrans.</div></div><div class="panel"><div class="toolbar"><div><h2>Rekening pembayaran</h2><p class="tiny">Untuk transfer manual.</p></div></div>${d.banks.map(b=>`<div class="bank-row"><span><strong>${esc(b.name)}</strong><small>${esc(b.number)} · ${esc(b.holder)}</small></span><button class="text-btn" data-edit-bank="${esc(b.id)}">Edit</button></div>`).join('')}</div></div></div>`;
   }
+
 
   return `<div class="toolbar"><div><h2>Aktivitas</h2><p class="tiny">Audit log perubahan penting.</p></div></div><div class="table-wrap"><table><thead><tr><th>Waktu</th><th>Aktor</th><th>Aksi</th><th>Record</th></tr></thead><tbody>${d.audit.map(a=>`<tr><td>${dt(a.timestamp)}</td><td>${esc(a.actor)}</td><td>${esc(a.action.replaceAll('_',' '))}</td><td>${esc(a.record_id||'')}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 function editProduct(id){
-  const p = state.admin.products.find(x=>x.id===id) || {id:'',name:'',category:'Digital',duration:'1 bulan',price:10000,description:'',benefits:[],terms:'',stock:-1,active:true,badge:'',icon:'generic',fulfillmentMode:'manual',thumbnail:'',featured:false,requiresLoginCredentials:false};
-  openModal(p.id?'Edit produk':'Tambah produk', `<form id="productForm" data-id="${esc(p.id)}"><label class="field">Nama produk<input name="name" value="${esc(p.name)}" required></label><div class="row"><label class="field">Kategori<input name="category" value="${esc(p.category)}" required><small>Kategori Top Up otomatis diproses manual.</small></label><label class="field">Durasi / paket<input name="duration" value="${esc(p.duration)}" required></label></div><div class="row"><label class="field">Harga<input name="price" type="number" min="1000" value="${p.price}" required></label><label class="field">Stok manual<input name="stock" type="number" min="-1" value="${p.stock}" required><small>-1 = tidak terbatas.</small></label></div><div class="thumbnail-upload-box"><div class="thumbnail-preview">${productThumb(p,'admin-thumb-preview')}</div><div class="thumbnail-upload-fields"><label class="field">Upload thumbnail<input name="thumbnailFile" type="file" accept="image/jpeg,image/png,image/webp"><small>JPG, PNG, atau WebP · maksimal 1 MB. Upload baru akan mengganti thumbnail tersimpan.</small></label><label class="field">Atau URL/path thumbnail<input name="thumbnail" value="${esc(p.hasUploadedThumbnail?'':(p.thumbnail||''))}" placeholder="/assets/products/produk.svg atau https://..."><small>Boleh dikosongkan jika memakai file upload.</small></label></div>${p.hasUploadedThumbnail?`<label class="check compact-check"><input name="clearUploadedThumbnail" type="checkbox"> Hapus thumbnail upload yang tersimpan</label>`:''}</div><label class="field">Deskripsi<input name="description" value="${esc(p.description)}"></label><label class="field">Benefit (satu per baris)<textarea name="benefits">${esc((p.benefits||[]).join('\n'))}</textarea></label><label class="field">Ketentuan<textarea name="terms">${esc(p.terms)}</textarea></label><div class="row"><label class="field">Badge<input name="badge" value="${esc(p.badge)}" placeholder="Favorit / Promo"></label><label class="field">Ikon<select name="icon">${['generic','netflix','youtube','ai','stars'].map(x=>`<option ${p.icon===x?'selected':''}>${x}</option>`).join('')}</select></label></div><label class="field">Mode pengiriman<select name="fulfillmentMode"><option value="manual" ${p.fulfillmentMode==='manual'?'selected':''}>Manual oleh admin</option><option value="inventory" ${p.fulfillmentMode==='inventory'?'selected':''}>Inventory otomatis</option></select><small>Untuk kategori Top Up backend selalu memaksa mode Manual.</small></label><label class="check"><input name="requiresLoginCredentials" type="checkbox" ${p.requiresLoginCredentials?'checked':''}> Memerlukan email + password akun pelanggan untuk proses manual</label><label class="check"><input name="featured" type="checkbox" ${p.featured?'checked':''}> Jadikan produk unggulan di homepage</label><label class="check"><input name="active" type="checkbox" ${p.active?'checked':''}> Tampilkan produk di toko</label><button class="btn full" type="submit">Simpan produk</button></form>`);
+  const p = state.admin.products.find(x=>x.id===id) || {id:'',name:'',category:'Digital',duration:'1 bulan',price:10000,description:'',benefits:[],terms:'',stock:-1,active:true,badge:'',icon:'generic',fulfillmentMode:'manual',thumbnail:'',featured:false,requiresLoginCredentials:false,lowStockThreshold:3};
+  openModal(p.id?'Edit produk':'Tambah produk', `<form id="productForm" data-id="${esc(p.id)}"><label class="field">Nama produk<input name="name" value="${esc(p.name)}" required></label><div class="row"><label class="field">Kategori<input name="category" value="${esc(p.category)}" required><small>Kategori Top Up otomatis diproses manual.</small></label><label class="field">Durasi / paket<input name="duration" value="${esc(p.duration)}" required></label></div><div class="row"><label class="field">Harga<input name="price" type="number" min="1000" value="${p.price}" required></label><label class="field">Stok manual<input name="stock" type="number" min="-1" value="${p.stock}" required><small>-1 = tidak terbatas.</small></label></div><label class="field">Batas stok menipis<input name="lowStockThreshold" type="number" min="0" max="999" value="${p.lowStockThreshold||3}"><small>Dashboard memberi alert jika stok ≤ angka ini.</small></label><div class="thumbnail-upload-box"><div class="thumbnail-preview">${productThumb(p,'admin-thumb-preview')}</div><div class="thumbnail-upload-fields"><label class="field">Upload thumbnail<input name="thumbnailFile" type="file" accept="image/jpeg,image/png,image/webp"><small>JPG, PNG, atau WebP · maksimal 1 MB. Upload baru akan mengganti thumbnail tersimpan.</small></label><label class="field">Atau URL/path thumbnail<input name="thumbnail" value="${esc(p.hasUploadedThumbnail?'':(p.thumbnail||''))}" placeholder="/assets/products/produk.svg atau https://..."><small>Boleh dikosongkan jika memakai file upload.</small></label></div>${p.hasUploadedThumbnail?`<label class="check compact-check"><input name="clearUploadedThumbnail" type="checkbox"> Hapus thumbnail upload yang tersimpan</label>`:''}</div><label class="field">Deskripsi<input name="description" value="${esc(p.description)}"></label><label class="field">Benefit (satu per baris)<textarea name="benefits">${esc((p.benefits||[]).join('\n'))}</textarea></label><label class="field">Ketentuan<textarea name="terms">${esc(p.terms)}</textarea></label><div class="row"><label class="field">Badge<input name="badge" value="${esc(p.badge)}" placeholder="Favorit / Promo"></label><label class="field">Ikon<select name="icon">${['generic','netflix','youtube','ai','stars'].map(x=>`<option ${p.icon===x?'selected':''}>${x}</option>`).join('')}</select></label></div><label class="field">Mode pengiriman<select name="fulfillmentMode"><option value="manual" ${p.fulfillmentMode==='manual'?'selected':''}>Manual oleh admin</option><option value="inventory" ${p.fulfillmentMode==='inventory'?'selected':''}>Inventory otomatis</option></select><small>Untuk kategori Top Up backend selalu memaksa mode Manual.</small></label><label class="check"><input name="requiresLoginCredentials" type="checkbox" ${p.requiresLoginCredentials?'checked':''}> Memerlukan email + password akun pelanggan untuk proses manual</label><label class="check"><input name="featured" type="checkbox" ${p.featured?'checked':''}> Jadikan produk unggulan di homepage</label><label class="check"><input name="active" type="checkbox" ${p.active?'checked':''}> Tampilkan produk di toko</label><button class="btn full" type="submit">Simpan produk</button></form>`);
 }
 
 function adjustStockModal(id){
@@ -506,10 +641,35 @@ function editBank(id){
   openModal('Edit rekening', `<form id="bankForm" data-id="${esc(b.id)}"><label class="field">Nama bank<input name="name" value="${esc(b.name)}" required></label><label class="field">Nomor rekening<input name="number" value="${esc(b.number)}" required></label><label class="field">Atas nama<input name="holder" value="${esc(b.holder)}" required></label><label class="check"><input name="active" type="checkbox" ${b.active?'checked':''}> Aktif untuk checkout</label><button class="btn full" type="submit">Simpan rekening</button></form>`);
 }
 
+
+function editVoucher(code=''){
+  const v=(state.admin.vouchers||[]).find(x=>x.code===code)||{code:'',name:'',discount_type:'fixed',discountValue:10000,minSpend:0,maxDiscount:0,usageLimit:0,perUserLimit:1,category:'',productIds:[],new_customers_only:false,active:true,starts_at:'',ends_at:''};
+  const dateVal=x=>x?new Date(x).toISOString().slice(0,16):'';
+  openModal(v.code?'Edit voucher':'Buat voucher',`<form id="voucherForm" data-code="${esc(v.code)}"><div class="row"><label class="field">Kode voucher<input name="code" value="${esc(v.code)}" ${v.code?'readonly':''} required maxlength="40" placeholder="UPLY10"></label><label class="field">Nama campaign<input name="name" value="${esc(v.name||'')}" placeholder="Promo pelanggan baru"></label></div><div class="row"><label class="field">Jenis diskon<select name="discountType"><option value="fixed" ${v.discount_type==='fixed'?'selected':''}>Nominal</option><option value="percent" ${v.discount_type==='percent'?'selected':''}>Persen</option></select></label><label class="field">Nilai diskon<input name="discountValue" type="number" min="1" value="${v.discountValue||0}" required></label></div><div class="row"><label class="field">Minimum transaksi<input name="minSpend" type="number" min="0" value="${v.minSpend||0}"></label><label class="field">Maksimum diskon<input name="maxDiscount" type="number" min="0" value="${v.maxDiscount||0}"><small>0 = tanpa batas.</small></label></div><div class="row"><label class="field">Kuota total<input name="usageLimit" type="number" min="0" value="${v.usageLimit||0}"><small>0 = tanpa batas.</small></label><label class="field">Limit per user<input name="perUserLimit" type="number" min="1" value="${v.perUserLimit||1}"></label></div><div class="row"><label class="field">Kategori khusus<input name="category" value="${esc(v.category||'')}" placeholder="Kosong = semua"></label><label class="field">Produk khusus<select name="productIds" multiple size="5">${state.admin.products.map(p=>`<option value="${esc(p.id)}" ${(v.productIds||[]).includes(p.id)?'selected':''}>${esc(p.name)} · ${esc(p.duration)}</option>`).join('')}</select></label></div><div class="row"><label class="field">Mulai<input name="startsAt" type="datetime-local" value="${dateVal(v.starts_at)}"></label><label class="field">Berakhir<input name="endsAt" type="datetime-local" value="${dateVal(v.ends_at)}"></label></div><label class="check"><input name="newCustomersOnly" type="checkbox" ${v.new_customers_only?'checked':''}> Khusus pelanggan baru</label><label class="check"><input name="active" type="checkbox" ${v.active?'checked':''}> Voucher aktif</label><button class="btn full" type="submit">Simpan voucher</button></form>`);
+}
+
+function balanceAdjustModal(userId){
+  const c=state.admin.customers.find(x=>x.id===userId);if(!c)return;
+  openModal('Atur saldo · '+c.name,`<form id="balanceForm" data-user-id="${esc(c.id)}"><div class="notice"><strong>Saldo saat ini:</strong> ${money(c.balance||0)}</div><label class="field">Perubahan saldo<input name="amount" type="number" step="1000" required placeholder="50000"><small>Positif untuk tambah, negatif untuk kurangi. Contoh: 50000 atau -10000.</small></label><label class="field">Catatan<textarea name="note" maxlength="300" placeholder="Bonus, refund, koreksi saldo, dll"></textarea></label><button class="btn full" type="submit">Simpan perubahan saldo</button></form>`);
+}
+
+function tierModal(userId){
+  const c=state.admin.customers.find(x=>x.id===userId);if(!c)return;
+  openModal('Role pelanggan · '+c.name,`<form id="tierForm" data-user-id="${esc(c.id)}"><div class="notice"><strong>Role saat ini:</strong> ${esc(c.membershipTier||'customer')} · ${c.membershipManual?'manual':'otomatis'}</div><label class="field">Role<select name="tier"><option value="auto">Auto berdasarkan transaksi</option>${['customer','member','reseller','vip'].map(x=>`<option value="${x}" ${c.membershipManual&&c.membershipTier===x?'selected':''}>${x}</option>`).join('')}</select></label><p class="tiny">Auto: Member 3 order/Rp250rb · Reseller 10 order/Rp1jt · VIP 30 order/Rp3jt.</p><button class="btn full" type="submit">Simpan role</button></form>`);
+}
+
+function exportReportCSV(){
+  const rows=state.admin?.orders||[];
+  const header=['Order ID','Tanggal','Pelanggan','Email','Produk','Qty','Subtotal','Diskon','Voucher','Saldo','Total Dibayar','Payment','Status'];
+  const csv=[header,...rows.map(o=>[o.id,dt(o.createdAt),o.name,o.email,o.productName,o.quantity,o.subtotal||o.price*o.quantity,o.discount||0,o.voucherCode||'',o.balanceUsed||0,o.total,o.paymentMode,o.status])].map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\n');
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`uply-report-${new Date().toISOString().slice(0,10)}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
 function adminOrderModal(id){
   const o = state.admin.orders.find(x=>x.id===id); if(!o) return;
-  const controls = o.status==='review' ? `<label class="field">Tindakan<select name="status"><option value="processing">Pembayaran diterima → proses</option><option value="pending_payment">Minta bukti ulang</option><option value="cancelled">Batalkan</option></select></label><label class="check"><input type="checkbox" name="confirmPayment"> Saya sudah mencocokkan dana masuk.</label>` : o.status==='pending_payment' ? `<label class="field">Tindakan<select name="status"><option value="cancelled">Batalkan pesanan</option><option value="processing">Tandai dibayar & proses</option></select></label><label class="check"><input type="checkbox" name="confirmPayment"> Jika memproses: pembayaran sudah diterima.</label>` : o.status==='processing' ? `<input type="hidden" name="status" value="completed"><label class="field">Detail produk / instruksi<textarea name="delivery" required>${esc(o.delivery||'')}</textarea></label>` : '';
-  openModal('Pesanan ' + o.id, `<div class="notice"><strong>${esc(o.productName)}</strong><br>${esc(o.name)} · ${esc(o.email)}<br>${money(o.total)} · ${statusLabel[o.status]||o.status}</div>${o.hasProof?`<button class="btn light small" data-proof="${esc(o.id)}">Lihat bukti transfer</button>`:''}${o.hasCredentials&&o.status==='processing'?`<button class="btn light small" data-order-credentials="${esc(o.id)}">🔐 Lihat login akun</button><p class="tiny">Tersedia setelah pembayaran terverifikasi. Jangan minta OTP/recovery code.</p>`:o.hasCredentials?'<p class="tiny">🔐 Data login tersimpan terenkripsi dan baru dapat dibuka setelah pembayaran terverifikasi.</p>':''}${controls?`<form id="orderForm" data-id="${esc(o.id)}" class="stack" style="margin-top:14px">${controls}<label class="field">Catatan pelanggan<textarea name="note">${esc(o.note||'')}</textarea></label><button class="btn full" type="submit">Simpan perubahan</button></form>`:o.status==='completed'?`<div class="panel"><strong>Detail terkirim</strong><pre class="delivery">${esc(o.delivery||'')}</pre></div>`:'<p class="tiny">Tidak ada tindakan manual yang diperlukan pada status ini.</p>'}`);
+  const controls = o.status==='review' ? `<label class="field">Tindakan<select name="status"><option value="processing">Pembayaran diterima → proses</option><option value="pending_payment">Minta bukti ulang</option><option value="cancelled">Batalkan</option></select></label><label class="check admin-payment-check"><input type="checkbox" name="confirmPayment"> Saya sudah mencocokkan dana masuk.</label>` : o.status==='pending_payment' ? `<label class="field">Tindakan<select name="status"><option value="cancelled">Batalkan pesanan</option><option value="processing">Tandai dibayar & proses</option></select></label><label class="check admin-payment-check"><input type="checkbox" name="confirmPayment"> Jika memproses: pembayaran sudah diterima.</label>` : o.status==='processing' ? `<input type="hidden" name="status" value="completed"><label class="field">Detail produk / instruksi<textarea name="delivery" required>${esc(o.delivery||'')}</textarea></label>` : '';
+  const d=document.querySelector('#modal'); if(d) d.classList.add('admin-order-dialog');
+  openModal('Pesanan ' + o.id, `<div class="admin-order-modal"><div class="admin-order-summary"><div><small>Produk</small><strong>${esc(o.productName)}</strong><span>${esc(o.duration)} · ${o.quantity}</span></div><div><small>Pelanggan</small><strong>${esc(o.name)}</strong><span>${esc(o.email)}</span></div><div><small>Total</small><strong>${money(o.total)}</strong><span>${statusLabel[o.status]||o.status}</span></div></div>${o.hasProof?`<button class="btn light small" data-proof="${esc(o.id)}">Lihat bukti transfer</button>`:''}${o.hasCredentials&&o.status==='processing'?`<button class="btn light small" data-order-credentials="${esc(o.id)}">🔐 Lihat login akun</button><p class="tiny">Tersedia setelah pembayaran terverifikasi. Jangan minta OTP/recovery code.</p>`:o.hasCredentials?'<p class="tiny">🔐 Data login tersimpan terenkripsi dan baru dapat dibuka setelah pembayaran terverifikasi.</p>':''}${controls?`<form id="orderForm" data-id="${esc(o.id)}" class="stack admin-order-form" style="margin-top:14px">${controls}<label class="field">Catatan pelanggan<textarea name="note">${esc(o.note||'')}</textarea></label><div class="admin-confirm-bar"><button class="btn full" type="submit">Simpan perubahan</button></div></form>`:o.status==='completed'?`<div class="panel"><strong>Detail terkirim</strong><pre class="delivery">${esc(o.delivery||'')}</pre></div>`:'<p class="tiny">Tidak ada tindakan manual yang diperlukan pada status ini.</p>'}</div>`);
 }
 
 async function refreshAdmin(){
@@ -554,8 +714,11 @@ app.addEventListener('change', e => {
   if(e.target.id==='inventoryProductFilter'){ state.inventoryProduct=e.target.value; $('#adminContent').innerHTML=adminContent(); }
   if(e.target.id==='inventoryStatusFilter'){ state.inventoryStatus=e.target.value; $('#adminContent').innerHTML=adminContent(); }
   if(e.target.id==='checkoutQuantity'){
-    const form=e.target.closest('#checkoutForm'); const p=state.catalog.products.find(x=>x.id===form?.dataset.productId); const out=$('#checkoutTotal'); if(p&&out) out.textContent=money(Number(p.price)*Number(e.target.value||1));
+    if(state.appliedVoucher && Number(state.appliedVoucher.qty)!==Number(e.target.value||1)){state.appliedVoucher=null;const h=$('#voucherHint');if(h)h.textContent='Jumlah berubah. Terapkan voucher kembali.';}
+    checkoutRecalc();
   }
+  if(e.target.id==='useBalance') checkoutRecalc();
+  if(e.target.name==='paymentMethod'){togglePaymentPanels();checkoutRecalc();}
   if(e.target.id==='checkoutChannel'){
     const form=e.target.closest('#checkoutForm'); const phoneInput=form?.elements?.phone; if(phoneInput) phoneInput.required=e.target.value==='whatsapp';
   }
@@ -567,10 +730,11 @@ document.addEventListener('click', async e => {
   if(e.target.closest('[data-cart-open]')){openCart();return;}
   if(e.target.closest('[data-cart-close]')){closeCart();return;}
   if(e.target.closest('[data-cart-shop]')){closeCart();location.hash='#katalog';setTimeout(()=>document.getElementById('produk')?.scrollIntoView({behavior:'smooth'}),120);return;}
-  if(e.target.closest('[data-cart-remove]')){state.cart=null;saveCart();return;}
-  if(e.target.closest('[data-cart-minus]')){if(state.cart){state.cart.qty=Math.max(1,Number(state.cart.qty||1)-1);saveCart();}return;}
-  if(e.target.closest('[data-cart-plus]')){const p=cartProduct();if(state.cart&&p){const max=p.stock>0?Math.min(5,Number(p.stock)):5;state.cart.qty=Math.min(max,Number(state.cart.qty||1)+1);saveCart();}return;}
+  if(e.target.closest('[data-cart-remove]')){state.cart=null;state.appliedVoucher=null;saveCart();return;}
+  if(e.target.closest('[data-cart-minus]')){if(state.cart){state.cart.qty=Math.max(1,Number(state.cart.qty||1)-1);state.appliedVoucher=null;saveCart();}return;}
+  if(e.target.closest('[data-cart-plus]')){const p=cartProduct();if(state.cart&&p){const max=p.stock>0?Math.min(5,Number(p.stock)):5;state.cart.qty=Math.min(max,Number(state.cart.qty||1)+1);state.appliedVoucher=null;saveCart();}return;}
   if(e.target.closest('[data-cart-checkout]')){const p=cartProduct();if(!p)return;state.checkoutQty=Number(state.cart.qty)||1;state.pendingCheckout=p.id;closeCart();if(!state.user||state.user.role!=='user'){openModal('Masuk untuk checkout',loginForm(false));return;}state.pendingCheckout='';location.hash='#checkout/'+encodeURIComponent(p.id);return;}
+  if(e.target.closest('[data-mobile-menu]')){ const account=state.user?(state.user.role==='admin'?'<a class="market-menu-link primary" href="#admin" data-close>Panel Admin</a>':'<a class="market-menu-link primary" href="#dashboard" data-close>'+esc(state.user.name)+'</a>'):'<button class="market-menu-link primary" type="button" data-open-login>Masuk / Daftar</button>'; openModal('Menu',`<div class="koala-menu-sheet"><nav class="market-mobile-menu"><a href="#katalog" data-close>Beranda</a><button type="button" data-scroll-products data-close>Produk</button><a href="#bantuan" data-close>Ketentuan & Garansi</a><a href="#pesanan" data-close>Cek Status Pesanan</a><a href="#bantuan" data-close>Metode Pembayaran</a><a href="#bantuan" data-close>Tentang Kami</a><a href="#bantuan" data-close>Blog & Artikel</a>${account}</nav><div class="koala-menu-footer"><small>Follow Us</small><div><span>◎</span><span>◉</span><span>◌</span><span>◆</span></div><p>© ${new Date().getFullYear()} Uply Digital. Semua hak dilindungi.</p></div></div>`); return; }
   if(e.target.closest('[data-support-open]')){const wa=String(state.catalog?.settings?.whatsapp||'').replace(/\D/g,'');openModal('Bantuan Uply Digital',`<div class="support-modal"><p>Butuh bantuan memilih produk atau memeriksa pesanan?</p><div class="stack">${wa?`<a class="btn full" href="https://wa.me/${esc(wa)}" target="_blank" rel="noopener">Chat WhatsApp Admin</a>`:''}<a class="btn light full" href="#bantuan" data-close>Pusat Bantuan</a><a class="btn light full" href="#pesanan" data-close>Cek Pesanan Saya</a></div></div>`);return;}
   if(e.target.closest('[data-open-register]')){ if(state.user){location.hash=state.user.role==='admin'?'#admin':'#dashboard';return;} openModal('Daftar akun Uply Digital',registerForm()); return; }
   if(e.target.closest('[data-member-scroll]')){document.getElementById('memberStatus')?.scrollIntoView({behavior:'smooth',block:'center'});return;}
@@ -601,14 +765,22 @@ document.addEventListener('click', async e => {
   const checkoutLogin=e.target.closest('[data-checkout-login]'); if(checkoutLogin){state.pendingCheckout=checkoutLogin.dataset.checkoutLogin;openModal('Masuk untuk checkout',loginForm(false));return;}
   const pay = e.target.closest('[data-pay]'); if(pay){ try{const r=await api('retryPayment',{orderId:pay.dataset.pay}); if(r.paymentUrl){location.href=r.paymentUrl;}else{state.orders=await api('orders');await route();msg(r.paymentData?.qrUrl?'Pembayaran Midtrans berhasil dibuat. Silakan lanjutkan ke halaman pembayaran.':'Instruksi pembayaran berhasil dibuat.');}}catch(err){msg(err.message)} return; }
   const syncPay=e.target.closest('[data-sync-pay]'); if(syncPay){try{const r=await api('syncPaymentStatus',{orderId:syncPay.dataset.syncPay});state.orders=await api('orders');await route();msg(r.state==='success'?'Pembayaran sudah terverifikasi.':'Status pembayaran diperbarui.');}catch(err){msg(err.message)}return;}
-  const cancel = e.target.closest('[data-cancel]'); if(cancel){ if(confirm('Batalkan pesanan ini?')){try{await api('cancelOrder',{orderId:cancel.dataset.cancel});state.orders=await api('orders');await route();msg('Pesanan dibatalkan.')}catch(err){msg(err.message)}}return; }
+  const cancel = e.target.closest('[data-cancel]'); if(cancel){ if(confirm('Batalkan pesanan ini?')){try{await api('cancelOrder',{orderId:cancel.dataset.cancel});state.orders=await api('orders');state.user=await api('me');setAccount();await route();msg('Pesanan dibatalkan.')}catch(err){msg(err.message)}}return; }
   const cred = e.target.closest('[data-order-credentials]'); if(cred){ try{const r=await api('getOrderCredentials',{orderId:cred.dataset.orderCredentials});openModal('Login akun untuk proses',`<div class="notice warn"><strong>Data sensitif.</strong><br>Gunakan hanya untuk pesanan ini. Jangan meminta OTP, recovery code, atau kode 2FA.</div><label class="field">Email<input readonly value="${esc(r.email)}"></label><label class="field">Password<div class="copy-secret-row"><input readonly type="password" id="credentialPassword" value="${esc(r.password)}"><button class="btn light small" type="button" data-copy="${esc(r.password)}">Salin</button></div></label>`);}catch(err){msg(err.message)} return; }
   const proof = e.target.closest('[data-proof]'); if(proof){ try{const r=await api('getProof',{orderId:proof.dataset.proof}); const url=`data:${r.mime};base64,${r.base64}`; window.open(url,'_blank','noopener,noreferrer');}catch(err){msg(err.message)} return; }
   const printInv = e.target.closest('[data-print-invoice]'); if(printInv){ printInvoice(printInv.dataset.printInvoice); return; }
   const copy = e.target.closest('[data-copy]'); if(copy){ try{await navigator.clipboard.writeText(copy.dataset.copy);msg('Berhasil disalin.')}catch{msg('Tidak bisa menyalin otomatis.')} return; }
   const toggle = e.target.closest('[data-inventory-toggle]'); if(toggle){ try{await api('inventorySetStatus',{inventoryId:toggle.dataset.inventoryToggle,status:toggle.dataset.nextStatus});await refreshAdmin();msg('Status inventory diperbarui.')}catch(err){msg(err.message)} return; }
   const quick = e.target.closest('[data-quick]'); if(quick){ const q=quick.dataset.quick;if(q==='add-product'){editProduct('');return;}if(q==='inventory'){state.adminTab='inventory';$('#adminContent').innerHTML=adminContent();return;}if(q==='review'){state.adminTab='orders';state.adminOrderStatus='review';$('#adminContent').innerHTML=adminContent();return;}if(q==='settings'){state.adminTab='settings';$('#adminContent').innerHTML=adminContent();return;} }
+  const ev=e.target.closest('[data-edit-voucher]'); if(ev){editVoucher(ev.dataset.editVoucher||'');return;}
+  const tv=e.target.closest('[data-toggle-voucher]'); if(tv){try{await api('toggleVoucher',{code:tv.dataset.toggleVoucher,active:tv.dataset.active==='true'});await refreshAdmin();msg('Status voucher diperbarui.');}catch(err){msg(err.message)}return;}
+  const bal=e.target.closest('[data-balance-user]'); if(bal){balanceAdjustModal(bal.dataset.balanceUser);return;}
+  const tier=e.target.closest('[data-tier-user]'); if(tier){tierModal(tier.dataset.tierUser);return;}
+  if(e.target.closest('[data-export-report]')){exportReportCSV();return;}
+  if(e.target.closest('[data-read-notifications]')){try{await api('markNotificationsRead',{});await refreshAdmin();msg('Notifikasi ditandai sudah dibaca.');}catch(err){msg(err.message)}return;}
   if(e.target.closest('[data-admin-refresh]')){ try{await refreshAdmin();msg('Data admin diperbarui.')}catch(err){msg(err.message)} return; }
+  if(e.target.closest('[data-cart-voucher]')){ const code=String($('#cartVoucher')?.value||'').trim(); const p=cartProduct(); if(!code||!p){msg('Masukkan kode voucher terlebih dahulu.');return;} if(!state.user||state.user.role!=='user'){state.pendingCheckout=p.id;openModal('Masuk untuk voucher',loginForm(false));return;} try{const q=await api('validateVoucher',{code,productId:p.id,quantity:Number(state.cart?.qty||1)});state.appliedVoucher={...q,productId:p.id,qty:Number(state.cart?.qty||1)};msg(`Voucher ${q.code} aktif. Hemat ${money(q.discount)}.`);openCart();}catch(err){state.appliedVoucher=null;msg(err.message);} return; }
+  if(e.target.closest('[data-checkout-voucher]')){ const form=$('#checkoutForm'), code=String($('#checkoutVoucher')?.value||'').trim(); const p=state.catalog.products.find(x=>x.id===form?.dataset.productId); if(!code||!p){msg('Masukkan kode voucher terlebih dahulu.');return;} try{const q=await api('validateVoucher',{code,productId:p.id,quantity:Number(form.elements.quantity?.value||1)});state.appliedVoucher={...q,productId:p.id,qty:Number(form.elements.quantity?.value||1)};const h=$('#voucherHint');if(h)h.textContent=`Voucher ${q.code} aktif · hemat ${money(q.discount)}`;checkoutRecalc();msg('Voucher berhasil diterapkan.');}catch(err){state.appliedVoucher=null;checkoutRecalc();msg(err.message);} return; }
 });
 
 document.addEventListener('click', async e => {
@@ -633,11 +805,10 @@ document.addEventListener('submit', async e => {
     } else if(f.id==='checkoutForm'){
       if(!fd.has('agree')) throw Error('Centang persetujuan ketentuan produk terlebih dahulu.');
       if(g('channel')==='whatsapp' && !g('phone').trim()) throw Error('Isi nomor WhatsApp jika detail ingin dikirim lewat WhatsApp.');
-      if(state.catalog.settings.paymentMode==='manual' && !g('bankId')) throw Error('Belum ada rekening pembayaran aktif. Hubungi admin.');
       const req=(crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2));
-      const r=await api('createOrder',{productId:f.dataset.productId,requestId:req,quantity:Number(g('quantity')),name:g('name'),phone:g('phone'),channel:g('channel'),bankId:g('bankId'),customerNote:g('customerNote'),accountEmail:g('accountEmail'),accountPassword:g('accountPassword'),paymentMethod:g('paymentMethod'),paymentChannel:g('paymentChannel'),agree:true});
-      state.orders=await api('orders');
-      state.checkoutQty=1;if(state.cart?.productId===f.dataset.productId){state.cart=null;saveCart();}
+      const r=await api('createOrder',{productId:f.dataset.productId,requestId:req,quantity:Number(g('quantity')),name:g('name'),phone:g('phone'),channel:g('channel'),bankId:g('bankId'),customerNote:g('customerNote'),accountEmail:g('accountEmail'),accountPassword:g('accountPassword'),paymentMethod:g('paymentMethod'),paymentChannel:g('paymentChannel'),voucherCode:g('voucherCode')||state.appliedVoucher?.code||'',useBalance:fd.has('useBalance'),agree:true});
+      state.orders=await api('orders'); state.user=await api('me'); setAccount();
+      state.checkoutQty=1;state.appliedVoucher=null;if(state.cart?.productId===f.dataset.productId){state.cart=null;saveCart();}
       if(r.paymentUrl){msg('Pesanan dibuat. Membuka pembayaran…');setTimeout(()=>location.assign(r.paymentUrl),650)}
       else{location.hash='#pesanan/'+encodeURIComponent(r.order.id);await route();msg(r.paymentError?`Pesanan dibuat, tetapi Midtrans error: ${r.paymentError}`:'Pesanan berhasil dibuat. Lanjutkan pembayaran.')}
     } else if(f.id==='proofForm'){
@@ -653,18 +824,27 @@ document.addEventListener('submit', async e => {
         const base64=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]||'');r.onerror=()=>reject(Error('Gagal membaca file thumbnail.'));r.readAsDataURL(thumbFile)});
         thumbnailUpload={mime:thumbFile.type,base64};
       }
-      await api('saveProduct',{product:{id:f.dataset.id,name:g('name'),category:g('category'),duration:g('duration'),price:Number(g('price')),stock:Number(g('stock')),description:g('description'),benefits:g('benefits').split('\n').map(x=>x.trim()).filter(Boolean),terms:g('terms'),badge:g('badge'),icon:g('icon'),thumbnail:g('thumbnail'),thumbnailUpload,clearUploadedThumbnail:fd.has('clearUploadedThumbnail'),featured:fd.has('featured'),requiresLoginCredentials:fd.has('requiresLoginCredentials'),fulfillmentMode:g('fulfillmentMode'),active:fd.has('active')}});
+      await api('saveProduct',{product:{id:f.dataset.id,name:g('name'),category:g('category'),duration:g('duration'),price:Number(g('price')),stock:Number(g('stock')),description:g('description'),benefits:g('benefits').split('\n').map(x=>x.trim()).filter(Boolean),terms:g('terms'),badge:g('badge'),icon:g('icon'),thumbnail:g('thumbnail'),thumbnailUpload,clearUploadedThumbnail:fd.has('clearUploadedThumbnail'),featured:fd.has('featured'),requiresLoginCredentials:fd.has('requiresLoginCredentials'),fulfillmentMode:g('fulfillmentMode'),lowStockThreshold:Number(g('lowStockThreshold')||3),active:fd.has('active')}});
       closeModal();await refreshAdmin();await loadCatalog();msg('Produk disimpan.');
     } else if(f.id==='stockAdjustForm'){
       const operation=g('operation'), amount=Number(g('amount'));const updated=await api('adjustProductStock',{productId:f.dataset.id,operation,amount});closeModal();await refreshAdmin();await loadCatalog();msg(`Stok ${updated.name} sekarang ${updated.stock===-1?'Tanpa Batas':updated.stock}.`);
     } else if(f.id==='bankForm'){
       await api('saveBank',{bank:{id:f.dataset.id,name:g('name'),number:g('number'),holder:g('holder'),active:fd.has('active')}});closeModal();await refreshAdmin();state.catalog=null;msg('Rekening disimpan.');
     } else if(f.id==='settingsForm'){
-      await api('saveSettings',{settings:{storeName:g('storeName'),whatsapp:g('whatsapp'),hours:g('hours'),paymentHours:Number(g('paymentHours')),notice:g('notice'),promoBanner:g('promoBanner'),storeOpen:fd.has('storeOpen')}});await refreshAdmin();state.catalog=null;msg('Pengaturan disimpan.');
+      const qrisFile=f.elements.qrisFile?.files?.[0]||null; let qrisUpload=null;
+      if(qrisFile){if(!['image/jpeg','image/png','image/webp'].includes(qrisFile.type))throw Error('QRIS harus JPG, PNG, atau WebP.');if(qrisFile.size>1350000)throw Error('Ukuran QRIS maksimal sekitar 1,3 MB.');const base64=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]||'');r.onerror=reject;r.readAsDataURL(qrisFile)});qrisUpload={mime:qrisFile.type,base64};}
+      await api('saveSettings',{settings:{storeName:g('storeName'),whatsapp:g('whatsapp'),hours:g('hours'),paymentHours:Number(g('paymentHours')),notice:g('notice'),promoBanner:g('promoBanner'),storeOpen:fd.has('storeOpen'),manualPaymentEnabled:fd.has('manualPaymentEnabled'),midtransPaymentEnabled:fd.has('midtransPaymentEnabled'),balancePaymentEnabled:fd.has('balancePaymentEnabled'),autoRoleEnabled:fd.has('autoRoleEnabled'),qrisName:g('qrisName'),qrisUpload,clearQris:fd.has('clearQris')}});await refreshAdmin();await loadCatalog();msg('Pengaturan disimpan.');
     } else if(f.id==='inventoryAddForm'){
       await api('inventoryAdd',{productId:g('productId'),itemValue:g('itemValue'),note:g('note'),status:g('status')});f.reset();await refreshAdmin();msg('1 item inventory berhasil ditambahkan.');
     } else if(f.id==='inventoryBulkForm'){
       const items=g('items').split('\n').map(x=>x.trim()).filter(Boolean);await api('inventoryImport',{productId:g('productId'),items});f.reset();await refreshAdmin();msg(`${items.length} item inventory ditambahkan.`);
+    } else if(f.id==='voucherForm'){
+      const productIds=Array.from(f.elements.productIds?.selectedOptions||[]).map(o=>o.value);
+      await api('saveVoucher',{voucher:{code:g('code'),name:g('name'),discountType:g('discountType'),discountValue:Number(g('discountValue')),minSpend:Number(g('minSpend')),maxDiscount:Number(g('maxDiscount')),usageLimit:Number(g('usageLimit')),perUserLimit:Number(g('perUserLimit')),category:g('category'),productIds,newCustomersOnly:fd.has('newCustomersOnly'),active:fd.has('active'),startsAt:g('startsAt'),endsAt:g('endsAt')}});closeModal();await refreshAdmin();msg('Voucher disimpan.');
+    } else if(f.id==='balanceForm'){
+      await api('adjustBalance',{userId:f.dataset.userId,amount:Number(g('amount')),note:g('note')});closeModal();await refreshAdmin();msg('Saldo pelanggan diperbarui.');
+    } else if(f.id==='tierForm'){
+      await api('setCustomerTier',{userId:f.dataset.userId,tier:g('tier')});closeModal();await refreshAdmin();msg('Role pelanggan diperbarui.');
     } else if(f.id==='orderForm'){
       await api('updateOrder',{orderId:f.dataset.id,status:g('status'),delivery:g('delivery'),note:g('note'),confirmPayment:fd.has('confirmPayment')});closeModal();await refreshAdmin();msg('Pesanan diperbarui.');
     }
