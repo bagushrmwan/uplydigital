@@ -23,6 +23,6 @@ export default async function handler(req,res){
     };
     const schema=await q(`SELECT COUNT(*)::int AS n FROM information_schema.columns WHERE table_schema='public' AND ((table_name='users' AND column_name='balance') OR (table_name='orders' AND column_name IN ('subtotal','discount','voucher_code','balance_used')) OR (table_name='products' AND column_name='low_stock_threshold'))`);
     const checkoutSchemaReady=Number(schema.rows[0]?.n||0)>=6;
-    return res.status(200).json({ok:payment.ready&&checkoutSchemaReady,backend:'connected',database:'connected',hosting:'vercel',version:'25.1',checkoutSchemaReady,payment});
+    return res.status(200).json({ok:payment.ready&&checkoutSchemaReady,backend:'connected',database:'connected',hosting:'vercel',version:'26.0',checkoutSchemaReady,payment});
   }catch(e){return res.status(500).json({ok:false,error:String(e.message||e)})}
 }

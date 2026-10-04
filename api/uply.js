@@ -155,6 +155,24 @@ export default async function handler(req,res){
     else if(action==='me'){
       const u=await requireAuth(req); if(u.role==='admin') data={id:null,email:u.email,name:'Admin Uply',phone:'',role:'admin'}; else {const profile=await getUserById(u.id); data={...profile,role:'user'};}
     }
+    else if(action==='updateProfile'){
+      const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
+      const name=text(p.name,80), email=normalizeEmail(p.email), phoneValue=phone(p.phone,false);
+      if(name.length<2) throw safeError('Nama minimal 2 karakter.'); if(!validEmail(email)) throw safeError('Email tidak valid.');
+      const exists=await q('SELECT id FROM users WHERE email=$1 AND id<>$2 LIMIT 1',[email,u.id]); if(exists.rowCount) throw safeError('Email sudah digunakan akun lain.');
+      await q('UPDATE users SET name=$2,email=$3,phone=$4,updated_at=NOW() WHERE id=$1',[u.id,name,email,phoneValue]);
+      await audit(email,'user_profile_updated',u.id,{phoneUpdated:!!phoneValue}); const profile=await getUserById(u.id); data={...profile,role:'user'};
+    }
+    else if(action==='changePassword'){
+      const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
+      const current=String(p.currentPassword||''), next=String(p.newPassword||''); if(next.length<8||next.length>72) throw safeError('Password baru harus 8–72 karakter.');
+      const {rows}=await q('SELECT email,password_salt,password_hash FROM users WHERE id=$1 LIMIT 1',[u.id]); const row=rows[0]; if(!row||!verifyPassword(current,row.password_salt,row.password_hash)) throw safeError('Password saat ini salah.',401);
+      if(current===next) throw safeError('Password baru harus berbeda dari password saat ini.'); const hp=hashPassword(next);
+      await q('UPDATE users SET password_salt=$2,password_hash=$3,updated_at=NOW() WHERE id=$1',[u.id,hp.salt,hp.hash]); await audit(row.email,'user_password_changed',u.id,{}); data=true;
+    }
+    else if(action==='logoutAll'){
+      const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403); await q('DELETE FROM sessions WHERE user_id=$1',[u.id]); await audit(u.email,'user_logout_all',u.id,{}); data=true;
+    }
     else if(action==='logout') { await destroySession(req); data=true; }
     else if(action==='orders'){
       const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
