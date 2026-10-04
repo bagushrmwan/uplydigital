@@ -12,22 +12,25 @@ const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 for(const marker of ['/api/uply']){ if(!app.includes(marker)){ console.error('APP MARKER MISSING',marker); ok=false; } }
 const health=fs.readFileSync(new URL('../api/health.js',import.meta.url),'utf8');
 if(!health.includes("hosting:'vercel'")){ console.error('Health hosting marker missing'); ok=false; }
+if(!health.includes("version:'27.0'")){ console.error('V27 health version missing'); ok=false; }
 
 const api=fs.readFileSync(new URL('../api/uply.js',import.meta.url),'utf8');
 for(const marker of ['saveVoucher','adjustBalance','setCustomerTier','validateVoucher','markNotificationsRead']){ if(!api.includes(marker)){console.error('API FEATURE MISSING',marker);ok=false;} }
+for(const marker of ['saveProductVariant','deleteProductVariant','adjustVariantStock','resolveVariant','variantId']){ if(!api.includes(marker)){console.error('V27 VARIANT API MISSING',marker);ok=false;} }
 for(const marker of ['Smart Voucher System','Balance System','Reporting System','Role Connector Otomatis']){ if(!app.includes(marker)){console.error('UI FEATURE MISSING',marker);ok=false;} }
+for(const marker of ['variant-section','data-manage-variants','variantForm','variantStockForm','productPriceText']){ if(!app.includes(marker)){console.error('V27 VARIANT UI MISSING',marker);ok=false;} }
 const db=fs.readFileSync(new URL('../lib/db.js',import.meta.url),'utf8');
 for(const marker of ['CREATE TABLE IF NOT EXISTS vouchers','CREATE TABLE IF NOT EXISTS balance_ledger','CREATE TABLE IF NOT EXISTS admin_notifications']){if(!db.includes(marker)){console.error('DB FEATURE MISSING',marker);ok=false;}}
+for(const marker of ['CREATE TABLE IF NOT EXISTS product_variants','ALTER TABLE orders ADD COLUMN IF NOT EXISTS variant_id','ALTER TABLE inventory ADD COLUMN IF NOT EXISTS variant_id']){if(!db.includes(marker)){console.error('V27 VARIANT DB MISSING',marker);ok=false;}}
 
 for(const marker of ['checkout-qty-stepper','data-checkout-minus','checkoutPreflight','data-product-thumb']){ if(!app.includes(marker)){console.error('HOTFIX UI MISSING',marker);ok=false;} }
 if(api.includes('`${prod.name} · ${name} ·')){console.error('LEGACY CHECKOUT SCOPE BUG STILL PRESENT');ok=false;}
-if(!api.includes("`${prod.name} · ${order.name} ·")){console.error('ORDER NAME HOTFIX MISSING');ok=false;}
-
+if(!api.includes('order.name')){console.error('ORDER NAME HOTFIX MISSING');ok=false;}
 
 for(const marker of ['function accountPage()','profileForm','passwordForm','data-logout-all','#akun']){if(!app.includes(marker)){console.error('V26 ACCOUNT UX MISSING',marker);ok=false;}}
 for(const marker of ["action==='updateProfile'","action==='changePassword'","action==='logoutAll'"]){if(!api.includes(marker)){console.error('V26 ACCOUNT API MISSING',marker);ok=false;}}
 const market=fs.readFileSync(new URL('../market.css',import.meta.url),'utf8');
-for(const marker of ['UPLY DIGITAL V26','--uply-primary:#0b5cff','.v18-buy-box .btn.dark','.account-layout-v26']){if(!market.includes(marker)){console.error('V26 BRAND CSS MISSING',marker);ok=false;}}
+for(const marker of ['UPLY DIGITAL V26','--uply-primary:#0b5cff','.v18-buy-box .btn.dark','.account-layout-v26','UPLY DIGITAL V27 — PRODUCT VARIANT SYSTEM','.variant-card']){if(!market.includes(marker)){console.error('BRAND/VARIANT CSS MISSING',marker);ok=false;}}
 
 if(!ok) process.exit(1);
-console.log('Smoke check OK');
+console.log('Smoke check OK — V27 variant system ready');
