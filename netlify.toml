@@ -1,0 +1,24 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/uply"
+  to = "/.netlify/functions/uply"
+  status = 200
+[[redirects]]
+  from = "/api/health"
+  to = "/.netlify/functions/health"
+  status = 200
+[[redirects]]
+  from = "/api/product-image"
+  to = "/.netlify/functions/product-image"
+  status = 200
+[[redirects]]
+  from = "/api/payment-webhook"
+  to = "/.netlify/functions/payment-webhook"
+  status = 200
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

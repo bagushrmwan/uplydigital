@@ -1,51 +1,38 @@
-UPLY DIGITAL V14 — PAYMENT + STOCK FIX
+UPLY DIGITAL V15 — SETUP CEPAT
 
-1. Replace seluruh isi repository GitHub dengan isi folder V14.
-2. Commit ke branch main dan tunggu Vercel Production Deployment selesai.
-3. Environment Variables lama tetap dipakai.
+1. Replace seluruh file project GitHub dengan isi V15 lalu commit ke branch main.
+2. Di Vercel, Environment Variables minimal:
+   DATABASE_URL
+   ADMIN_EMAIL
+   ADMIN_PASSWORD
+   SESSION_SECRET
+   CREDENTIAL_ENCRYPTION_KEY
+   SITE_URL
+   ALLOWED_ORIGIN
 
-WAJIB CEK UNTUK MIDTRANS:
-- PAYMENT_MODE = midtrans
-- MIDTRANS_SERVER_KEY = Server Key yang sesuai Sandbox/Production
-- MIDTRANS_IS_PRODUCTION = false untuk Sandbox, true untuk Production
-- SITE_URL = URL website Production tanpa slash di akhir
+3. Untuk BeliBayar Sandbox:
+   PAYMENT_MODE=belibayar
+   BELIBAYAR_API_KEY=byr_test_...
+   BELIBAYAR_SECRET_KEY=secret sandbox dari dashboard
+   BELIBAYAR_WEBHOOK_SECRET=webhook secret dari dashboard
+   BELIBAYAR_IS_PRODUCTION=false
+   BELIBAYAR_CALLBACK_URL=https://DOMAIN-KAMU/api/payment-webhook
+   BELIBAYAR_PAYMENT_METHOD=qris
 
-Opsional:
-- MIDTRANS_NOTIFICATION_URL = https://domain-kamu.vercel.app/api/payment-webhook
-  Jika tidak diisi, V14 otomatis membuat URL dari SITE_URL.
+4. PENTING — IP WHITELIST BELIBAYAR
+   Direct API BeliBayar mewajibkan IP whitelist.
+   Vercel Function biasa memakai outbound IP dinamis.
+   Agar pembayaran otomatis stabil, aktifkan Vercel Static IPs (Pro+) atau gunakan backend/proxy yang punya IP statis.
+   Copy Static IP Vercel lalu masukkan ke BeliBayar > Kredensial > IP Whitelist.
 
-4. Buka:
-   https://DOMAIN-KAMU/api/health
+5. Redeploy Vercel.
+6. Buka /api/health. Pastikan payment.ready=true dan provider=belibayar.
+7. Test transaksi Sandbox terlebih dahulu.
+8. Di dashboard BeliBayar, simulasi payment success lalu cek order berubah menjadi Sedang Diproses/Selesai.
 
-Target ketika Midtrans aktif:
-- ok: true
-- database: connected
-- payment.mode: midtrans
-- payment.ready: true
-- payment.serverKey: configured
-- payment.notificationUrl: https://DOMAIN-KAMU/api/payment-webhook
+STOCK:
+Panel Admin > Produk > Tambah stok > isi jumlah > Simpan stok.
+Jika stok awal Tanpa Batas (-1), Tambah stok akan mengubahnya menjadi jumlah yang dimasukkan.
 
-5. TEST PEMBAYARAN SANDBOX:
-- login pelanggan
-- checkout produk
-- klik Lanjut ke Pembayaran
-- selesaikan transaksi Sandbox
-- setelah kembali ke website, status akan disinkron otomatis
-- jika belum berubah, klik "Cek status pembayaran"
-
-6. TAMBAH STOK MANUAL:
-Panel Admin → Produk → pilih tombol "Tambah stok" / "Atur stok"
-- Tambah stok = menambahkan jumlah
-- Kurangi stok = mengurangi jumlah
-- Set stok langsung = menentukan stok final
-- nilai -1 = Tanpa batas
-
-7. INVENTORY OTOMATIS:
-Produk yang mode pengirimannya "Inventory otomatis" tidak memakai tombol stok manual.
-Masuk Panel Admin → Inventory → Tambah 1 Item.
-Setiap item available dihitung sebagai 1 stok.
-
-JANGAN:
-- jangan menaruh Server Key Midtrans di frontend/GitHub
-- jangan mencampur Server Key Sandbox dengan MIDTRANS_IS_PRODUCTION=true
-- jangan memakai stok manual untuk produk Inventory Otomatis
+THUMBNAIL:
+Panel Admin > Produk > Edit > Upload thumbnail > pilih JPG/PNG/WebP <=1MB > Simpan produk.

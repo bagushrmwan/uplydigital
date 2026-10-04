@@ -1,32 +1,29 @@
-# Hasil Pengujian Uply Digital V14
+# Hasil Pengujian V15
 
-Pengecekan lokal yang dilakukan:
+## Lulus
+- PASS — syntax check seluruh JavaScript frontend/backend.
+- PASS — mock BeliBayar QRIS create memakai endpoint Sandbox `/direct/v1/sandbox/payment/charge`.
+- PASS — HMAC-SHA256 `X-Signature` request dibuat.
+- PASS — mock inquiry status memakai `/direct/v1/sandbox/payment/status/:reference` + `X-Timestamp`.
+- PASS — verifikasi webhook `X-Belibayar-Signature` dengan raw body.
+- PASS — action frontend dan backend konsisten.
+- PASS — thumbnail upload validation JPG/PNG/WebP ditambahkan.
+- PASS — endpoint `/api/product-image` ditambahkan.
+- PASS — migration thumbnail/payment payload bersifat non-destructive (`IF NOT EXISTS`).
+- PASS — stock manual: add pada stok finite menambah nilai; add pada `-1` mengubah menjadi jumlah yang dimasukkan.
+- PASS — katalog direload setelah update stock.
 
-- PASS — `node --check` untuk `app.js`, semua `api/*.js`, dan semua `lib/*.js`.
-- PASS — mock Midtrans Snap request berhasil.
-- PASS — mock Midtrans Get Status berhasil dan diklasifikasikan `success`.
-- PASS — request Snap otomatis membawa `X-Override-Notification` ke `/api/payment-webhook`.
-- PASS — callback Midtrans kembali ke order lokal Uply Digital.
-- PASS — seluruh action API yang dipanggil frontend memiliki handler backend.
-- PASS — `syncPaymentStatus` tersedia sebagai fallback jika webhook terlambat/gagal.
-- PASS — payment event mempunyai `processed_at`; event gagal tidak dianggap selesai permanen.
-- PASS — gateway order ID/attempt memiliki migration non-destruktif.
-- PASS — stock adjustment API mendukung add / subtract / set dengan validasi.
-- PASS — stok manual checkout direservasi dengan transaksi PostgreSQL + row lock.
-- PASS — Inventory API menolak produk yang memakai stok manual dan memberi pesan yang jelas.
-- PASS — Top Up tetap manual dan credential flow V13 tetap dipertahankan.
+## Belum dapat diuji tanpa akun user
+- Transaksi BeliBayar Sandbox nyata.
+- IP whitelist merchant BeliBayar.
+- Webhook BeliBayar nyata ke domain Vercel.
+- PostgreSQL production user.
 
-Belum dapat dites tanpa kredensial/layanan milik pengguna:
-- transaksi Midtrans Sandbox nyata,
-- webhook Midtrans nyata ke domain Vercel,
-- koneksi PostgreSQL/Neon Production,
-- email Resend nyata.
-
-Test produksi yang disarankan:
+## Test yang wajib setelah deploy
 1. `/api/health`
-2. Tambah stok manual dari Admin → Produk
-3. Checkout 1 produk dengan stok terbatas
-4. Midtrans Sandbox sukses
-5. Pastikan order berubah `processing` / `completed`
-6. Test tombol `Cek status pembayaran`
-7. Test Midtrans expire/cancel dan pastikan stok manual kembali
+2. Login admin
+3. Netflix: set stok 0 → Tambah stok 5 → pastikan tampil 5
+4. Upload thumbnail baru → pastikan card/detail berubah
+5. Checkout Sandbox → QRIS tampil
+6. Simulasi `success` di dashboard BeliBayar → order berubah Processing/Completed
+7. Simulasi expire/cancel → stock manual kembali
