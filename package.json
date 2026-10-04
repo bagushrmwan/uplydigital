@@ -1,10 +1,14 @@
 {
-  "name": "uply-digital-netlify",
-  "version": "16.0.0",
+  "name": "uply-digital-vercel",
+  "version": "20.0.0",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=20"
+  },
+  "scripts": {
+    "check": "node --check app.js && node --check api/uply.js && node --check api/health.js && node --check api/payment-webhook.js && node --check api/product-image.js && node --check lib/db.js && node --check lib/security.js && node --check lib/midtrans.js && node --check lib/payment-state.js",
+    "test:smoke": "node scripts/smoke-check.mjs"
   },
   "dependencies": {
     "pg": "^8.13.1"

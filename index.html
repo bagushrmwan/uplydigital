@@ -2,46 +2,46 @@
 <html lang="id">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#081936">
-  <meta name="description" content="Uply Digital — toko kebutuhan digital yang simpel, cepat, dan mudah dipantau.">
-  <title>Uply Digital — Your Everyday Digital Store</title>
-  <link rel="icon" href="/assets/logo-uply-digital.png">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b5cff">
+  <meta name="description" content="Uply Digital — toko kebutuhan digital premium dengan checkout simpel, pembayaran aman, dan status pesanan transparan.">
+  <title>Uply Digital V20 — Upgrade Your Digital Life</title>
+  <link rel="icon" href="/assets/logo-mark.png">
   <script>
     (function(){
-      const saved = localStorage.getItem('uply_theme') || 'system';
-      const resolved = saved === 'system'
-        ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-        : saved;
-      document.documentElement.dataset.theme = resolved;
-      document.documentElement.dataset.themeMode = saved;
+      const saved=localStorage.getItem('uply_theme')||'system';
+      const resolved=saved==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):saved;
+      document.documentElement.dataset.theme=resolved;
+      document.documentElement.dataset.themeMode=saved;
     })();
   </script>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <header class="topbar">
-    <div class="wrap nav">
-      <a class="brand" href="#katalog" aria-label="Uply Digital">
+  <div class="v18-announcement"><div class="wrap"><span><b>⚡ Uply Digital V20</b> — kebutuhan digital dalam satu tempat.</span><a href="#produk" data-scroll-products>Belanja sekarang →</a></div></div>
+
+  <header class="topbar v18-topbar">
+    <div class="wrap nav v18-nav">
+      <a class="brand v18-brand" href="#katalog" aria-label="Uply Digital">
         <img class="brand-mark" src="/assets/logo-mark.png" alt="">
-        <span class="brand-word">Uply Digital</span>
+        <span><strong class="brand-word">Uply Digital</strong><small>Upgrade Your Digital Life</small></span>
       </a>
-      <nav class="desktop-nav" aria-label="Navigasi utama">
+      <nav class="desktop-nav v18-desktop-nav" aria-label="Navigasi utama">
         <a href="#katalog">Beranda</a>
         <button class="nav-link-button" type="button" data-scroll-products>Produk</button>
-        <a href="#dashboard">Dashboard</a>
+        <a href="#bantuan">Cara Beli</a>
         <a href="#pesanan">Pesanan</a>
-        <a href="#bantuan">Bantuan</a>
+        <a href="#dashboard">Dashboard</a>
       </nav>
-      <div class="nav-actions">
+      <div class="nav-actions v18-nav-actions">
         <button id="themeBtn" class="icon-btn" type="button" data-theme-open aria-label="Pilih tema" title="Tema tampilan">◐</button>
         <button id="cartBtn" class="icon-btn cart-trigger" type="button" data-cart-open aria-label="Buka keranjang">🛒<span id="cartCount" class="cart-count" hidden>0</span></button>
-        <button id="accountBtn" class="btn ghost">Masuk</button>
+        <button id="accountBtn" class="btn ghost v18-account-btn">Masuk</button>
       </div>
     </div>
   </header>
 
-  <main id="app"><div class="loading">Menyiapkan Uply Digital…</div></main>
+  <main id="app"><div class="loading"><span class="v18-loader"></span>Menyiapkan Uply Digital…</div></main>
 
   <div id="cartBackdrop" class="drawer-backdrop" hidden data-cart-close></div>
   <aside id="cartDrawer" class="cart-drawer" aria-label="Keranjang belanja" aria-hidden="true">
@@ -52,45 +52,27 @@
     <div id="cartDrawerBody" class="cart-drawer-body"></div>
   </aside>
 
-  <button class="floating-support" type="button" data-support-open aria-label="Bantuan cepat">?</button>
+  <button class="floating-support" type="button" data-support-open aria-label="Bantuan cepat"><span>?</span></button>
 
-  <nav class="mobile-bottom-nav" aria-label="Navigasi mobile">
+  <nav class="mobile-bottom-nav v18-mobile-nav" aria-label="Navigasi mobile">
     <a href="#katalog" data-mobile-nav="katalog"><span class="mobile-nav-icon">⌂</span><span>Beranda</span></a>
     <button type="button" data-scroll-products data-mobile-nav="produk"><span class="mobile-nav-icon">▦</span><span>Produk</span></button>
-    <a href="#dashboard" data-mobile-nav="dashboard"><span class="mobile-nav-icon">◫</span><span>Dashboard</span></a>
     <a href="#pesanan" data-mobile-nav="pesanan"><span class="mobile-nav-icon">≡</span><span>Pesanan</span></a>
+    <a href="#dashboard" data-mobile-nav="dashboard"><span class="mobile-nav-icon">◫</span><span>Akun</span></a>
   </nav>
 
-  <footer class="site-footer">
-    <div class="wrap footer footer-v12">
-      <div class="footer-brand footer-col">
-        <div class="footer-logo-row"><img src="/assets/logo-mark.png" alt=""><strong>Uply Digital</strong></div>
-        <p>Toko kebutuhan digital dengan proses yang simpel, status pesanan yang jelas, dan bantuan admin saat dibutuhkan.</p>
-        <div class="footer-badges"><span>✓ Proses jelas</span><span>✓ Pembayaran fleksibel</span><span>✓ Support admin</span></div>
+  <footer class="site-footer v18-footer">
+    <div class="wrap v18-footer-main">
+      <div class="v18-footer-brand">
+        <div class="footer-logo-row"><img src="/assets/logo-mark.png" alt=""><span><strong>Uply Digital</strong><small>Upgrade Your Digital Life</small></span></div>
+        <p>Toko kebutuhan digital dengan pengalaman belanja yang simpel, status order yang jelas, dan bantuan admin saat dibutuhkan.</p>
+        <div class="footer-badges"><span>✓ Checkout ringkas</span><span>✓ Pembayaran aman</span><span>✓ Dashboard pelanggan</span></div>
       </div>
-      <div class="footer-col">
-        <h4>Produk</h4>
-        <button type="button" data-scroll-products>Streaming</button>
-        <button type="button" data-scroll-products>AI & Produktivitas</button>
-        <button type="button" data-scroll-products>Top Up</button>
-        <button type="button" data-scroll-products>Perangkat</button>
-      </div>
-      <div class="footer-col">
-        <h4>Informasi</h4>
-        <a href="#bantuan">Cara Pembelian</a>
-        <a href="#bantuan">Metode Pembayaran</a>
-        <a href="#pesanan">Cek Status Pesanan</a>
-        <a href="#dashboard">Dashboard Pelanggan</a>
-      </div>
-      <div class="footer-col">
-        <h4>Akun</h4>
-        <button type="button" data-open-login>Masuk</button>
-        <button type="button" data-open-register>Daftar Gratis</button>
-        <a href="#admin">Panel Admin</a>
-        <button type="button" data-support-open>Hubungi Support</button>
-      </div>
+      <div class="footer-col"><h4>Belanja</h4><button type="button" data-scroll-products>Semua Produk</button><button type="button" data-scroll-products>Streaming</button><button type="button" data-scroll-products>AI & Produktivitas</button><button type="button" data-scroll-products>Top Up</button></div>
+      <div class="footer-col"><h4>Bantuan</h4><a href="#bantuan">Cara Pembelian</a><a href="#bantuan">Pembayaran</a><a href="#pesanan">Cek Pesanan</a><button type="button" data-support-open>Hubungi Support</button></div>
+      <div class="footer-col"><h4>Akun</h4><button type="button" data-open-login>Masuk</button><button type="button" data-open-register>Daftar Gratis</button><a href="#dashboard">Dashboard</a><a href="#admin">Panel Admin</a></div>
     </div>
-    <div class="footer-bottom"><div class="wrap"><span>© <span id="year"></span> Uply Digital. All rights reserved.</span><span>Upgrade Your Digital Life.</span></div></div>
+    <div class="footer-bottom"><div class="wrap"><span>© <span id="year"></span> Uply Digital. All rights reserved.</span><span>Merek pihak ketiga tetap menjadi milik pemilik masing-masing.</span></div></div>
   </footer>
 
   <dialog id="modal"><div id="modalBody"></div></dialog>

@@ -130,24 +130,25 @@ function inventoryStatus(s){ return `<span class="status inv-${esc(s)}">${esc(in
 
 function hero(){
   const products = state.catalog?.products || [];
-  const featured = products.find(p=>p.featured) || products.find(p=>p.bestSeller) || products.find(p=>p.badge) || products[0];
-  const minis = products.filter(p=>!featured || p.id!==featured.id).slice(0,3);
-  const featuredHtml = featured ? `<div class="featured-main">
-      <div class="featured-top"><span class="featured-badge">${esc(featured.badge || 'Pilihan Uply')}</span><span class="stock-dot ${featured.stock===0?'off':''}"></span></div>
-      <div class="featured-product-cover thumbnail-cover">${productThumb(featured,'featured-thumb')}<span>${esc(featured.duration)}</span></div>
-      <div class="featured-product-info"><div><small>${esc(featured.category)}</small><h3>${esc(featured.name)}</h3><strong>${money(featured.price)}</strong></div><button class="btn small" data-view-product="${esc(featured.id)}" ${featured.stock===0?'disabled':''}>Beli sekarang</button></div>
-    </div>` : '';
-  const miniHtml = minis.length ? `<div class="featured-mini-grid">${minis.map(p=>`<button class="featured-mini" data-view-product="${esc(p.id)}" ${p.stock===0?'disabled':''}><span class="featured-mini-cover thumbnail-cover">${productThumb(p,'featured-mini-thumb')}</span><span><small>${esc(p.category)}</small><b>${esc(p.name)}</b><strong>${money(p.price)}</strong></span></button>`).join('')}</div>` : '';
-  return `<section class="hero v11-hero">
-    <div class="wrap hero-grid v11-hero-grid">
-      <div class="hero-copy">
-        <div class="hero-provider-pill">✦ Your Everyday Digital Store</div>
-        <h1>Premium digital.<br><em>Lebih simpel.</em></h1>
-        <p>Temukan kebutuhan hiburan, AI, top up, dan layanan digital favoritmu dalam satu tempat. Checkout mudah dan status pesanan bisa dipantau dari akunmu.</p>
-        <div class="hero-actions"><button class="btn hero-cta" type="button" data-scroll-products>Beli Sekarang</button>${state.user?`<a class="btn hero-secondary" href="${state.user.role==='admin'?'#admin':'#dashboard'}">${state.user.role==='admin'?'Panel Admin':'Dashboard Saya'}</a>`:`<button class="btn hero-secondary" type="button" data-open-register>Daftar Gratis</button>`}</div>
-        <div class="trust-row"><span>✓ Proses jelas</span><span>✓ Pembayaran fleksibel</span><span>✓ Bantuan admin</span></div>
+  const lead = products.find(p=>p.featured) || products.find(p=>p.bestSeller) || products[0];
+  const tiles = products.filter(p=>!lead || p.id!==lead.id).slice(0,3);
+  const tileHtml = tiles.map((p,i)=>`<button class="v18-float-card float-${i+1}" type="button" data-view-product="${esc(p.id)}" ${p.stock===0?'disabled':''}>${productThumb(p,'v18-float-thumb')}<span><small>${esc(p.category)}</small><strong>${esc(p.name)}</strong></span></button>`).join('');
+  const accountCta = state.user ? `<a class="btn v18-secondary" href="${state.user.role==='admin'?'#admin':'#dashboard'}">${state.user.role==='admin'?'Buka Panel Admin':'Buka Dashboard'}</a>` : `<button class="btn v18-secondary" type="button" data-open-register>Daftar Gratis</button>`;
+  return `<section class="hero v18-hero">
+    <div class="wrap v18-hero-grid">
+      <div class="v18-hero-copy">
+        <div class="v18-eyebrow"><span>✦</span> Solusi produk digital terpercaya</div>
+        <h1>Kebutuhan digital <em>premium</em>, lebih simpel.</h1>
+        <p>Beli kebutuhan hiburan, AI, top up, dan layanan perangkat dari satu tempat. Checkout ringkas, pembayaran aman, dan status pesanan transparan.</p>
+        <div class="hero-actions"><button class="btn v18-primary" type="button" data-scroll-products>Belanja Sekarang <span>→</span></button>${accountCta}</div>
+        <div class="v18-hero-proof"><div class="proof-avatars"><b>U</b><b>P</b><b>L</b><b>Y</b></div><span><strong>Proses lebih jelas</strong><small>Dashboard pelanggan & bantuan admin</small></span></div>
       </div>
-      <div class="featured-showcase">${featuredHtml}${miniHtml}</div>
+      <div class="v18-hero-art" aria-label="Pilihan produk digital Uply Digital">
+        <div class="v18-glow"></div>
+        ${lead?`<button class="v18-lead-product" type="button" data-view-product="${esc(lead.id)}">${productThumb(lead,'v18-lead-thumb')}<span class="v18-lead-caption"><small>${esc(lead.category)}</small><strong>${esc(lead.name)}</strong><em>${money(lead.price)}</em></span></button>`:''}
+        ${tileHtml}
+        <div class="v18-secure-card"><span>✓</span><div><strong>Transaksi aman</strong><small>Checkout & status dalam satu akun</small></div></div>
+      </div>
     </div>
   </section>`;
 }
@@ -156,19 +157,22 @@ function productCards(){
     (state.filter === 'Semua' || p.category === state.filter) &&
     `${p.name} ${p.category} ${p.duration}`.toLowerCase().includes(state.search.toLowerCase())
   );
-  if (!arr.length) return `<div class="empty" style="grid-column:1/-1">Produk tidak ditemukan.</div>`;
-  return arr.map(p => `<article class="card">
-    <div class="cover thumbnail-cover">${productThumb(p,'card-thumb')}<div class="thumb-overlay"><strong>${esc(p.duration)}</strong></div></div>
-    <div class="card-body">
-      <div class="meta"><span>${esc(p.category)}</span><span class="meta-badges">${p.bestSeller?'<span class="badge best">Terlaris</span>':''}${p.badge?`<span class="badge">${esc(p.badge)}</span>`:''}</span></div>
-      <h3>${esc(p.name)}</h3>
-      <p>${esc(p.description)}</p>
-      <div class="stock-line">${p.stock===0?'<span class="stock-out">Stok habis</span>':p.stock>0&&p.stock<=3?`<span class="stock-low">Sisa ${p.stock}</span>`:'<span>Siap dipesan</span>'}</div>
-      <div class="card-foot"><div class="price">${money(p.price)}<small> / ${esc(p.duration)}</small></div><button class="btn small" data-view-product="${esc(p.id)}" ${p.stock===0?'disabled':''}>Detail</button></div>
-    </div>
-  </article>`).join('');
+  if (!arr.length) return `<div class="empty v18-empty" style="grid-column:1/-1"><b>⌕</b><h3>Produk tidak ditemukan</h3><p>Coba kata kunci atau kategori lainnya.</p></div>`;
+  return arr.map(p => {
+    const stock=p.stock===0?'<span class="v18-stock out">● Stok habis</span>':p.stock>0&&p.stock<=3?`<span class="v18-stock low">● Sisa ${p.stock}</span>`:'<span class="v18-stock">● Stok tersedia</span>';
+    const badge=p.bestSeller?'Best Seller':(p.badge||'Pilihan Uply');
+    return `<article class="card v18-product-card">
+      <button class="v18-product-media" type="button" data-view-product="${esc(p.id)}" aria-label="Lihat ${esc(p.name)}">${productThumb(p,'card-thumb')}<span class="v18-badge">${esc(badge)}</span><span class="v18-duration">${esc(p.duration)}</span></button>
+      <div class="card-body">
+        <div class="v18-product-meta"><span>${esc(p.category)}</span>${stock}</div>
+        <h3>${esc(p.name)}</h3>
+        <p>${esc(p.description)}</p>
+        <div class="v18-product-benefits">${(p.benefits||[]).slice(0,2).map(x=>`<span>✓ ${esc(x)}</span>`).join('')}</div>
+        <div class="card-foot"><div class="price"><small>Mulai dari</small>${money(p.price)}</div><button class="btn small" data-view-product="${esc(p.id)}" ${p.stock===0?'disabled':''}>Lihat Produk <span>→</span></button></div>
+      </div>
+    </article>`;
+  }).join('');
 }
-
 function valueSection(){
   return `<section class="value-section"><div class="wrap"><div class="section-kicker">Kenapa Uply Digital?</div><div class="value-grid">
     <article><span>01</span><h3>Praktis</h3><p>Pilih produk dan selesaikan checkout tanpa alur yang berbelit.</p></article>
@@ -187,27 +191,43 @@ function categoryIcon(name){
 }
 function popularCategories(){
   const counts={}; for(const p of state.catalog.products) counts[p.category]=(counts[p.category]||0)+1;
-  const cats=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const cats=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,8);
   if(!cats.length) return '';
-  return `<section class="popular-categories"><div class="wrap"><div class="section-head compact-head"><div><div class="section-kicker">Kategori Populer</div><h2>Jelajahi berdasarkan kebutuhan</h2><p>Temukan produk lebih cepat dari kategori yang paling sering dicari.</p></div></div><div class="category-grid">${cats.map(([c,n])=>`<button type="button" class="category-card" data-filter="${esc(c)}"><b>${categoryIcon(c)}</b><strong>${esc(c)}</strong><span>${n} produk</span></button>`).join('')}</div></div></section>`;
+  const map={
+    'Streaming':['▶','Film & hiburan'],
+    'AI & Produktivitas':['✦','Kerja & kreativitas'],
+    'Top Up':['★','Sosial & creator'],
+    'Perangkat':['⌁','IMEI & layanan'],
+    'Digital':['▦','Produk digital']
+  };
+  return `<section class="popular-categories v18-categories"><div class="wrap"><div class="section-head v18-section-head"><div><span class="v18-mini-kicker">Kategori populer</span><h2>Temukan yang kamu butuhkan</h2><p>Jelajahi produk berdasarkan kategori.</p></div><button class="text-btn" type="button" data-scroll-products>Lihat semua →</button></div><div class="v18-category-grid">${cats.map(([c,n],i)=>{const m=map[c]||[categoryIcon(c),'Pilihan digital'];return `<button type="button" class="v18-category-card cat-${(i%6)+1}" data-filter="${esc(c)}"><b>${m[0]}</b><span><strong>${esc(c)}</strong><small>${esc(m[1])} · ${n} produk</small></span><em>→</em></button>`}).join('')}</div></div></section>`;
 }
 
+function trustStrip(){
+  return `<section class="v18-trust"><div class="wrap v18-trust-grid"><article><b>⚡</b><span><strong>Proses cepat</strong><small>Alur checkout dibuat ringkas</small></span></article><article><b>🛡</b><span><strong>Pembayaran aman</strong><small>Midtrans atau transfer manual</small></span></article><article><b>✓</b><span><strong>Status transparan</strong><small>Pantau dari dashboard akun</small></span></article><article><b>◉</b><span><strong>Support admin</strong><small>Bantuan saat dibutuhkan</small></span></article></div></section>`;
+}
+function promoSection(){
+  const promo=state.catalog.settings.promoBanner || 'Temukan paket digital pilihan dengan harga yang lebih hemat.';
+  return `<section class="v18-promo"><div class="wrap"><div class="v18-promo-card"><div><span class="v18-promo-pill">PROMO UPLY</span><h2>Upgrade kebutuhan digitalmu.</h2><p>${esc(promo)}</p></div><button class="btn v18-promo-cta" type="button" data-scroll-products>Lihat Produk →</button><div class="v18-promo-orb one"></div><div class="v18-promo-orb two"></div></div></div></section>`;
+}
+function socialProofSection(){
+  return `<section class="v18-social"><div class="wrap"><div class="section-head v18-section-head"><div><span class="v18-mini-kicker">Pengalaman pelanggan</span><h2>Belanja digital tanpa ribet</h2><p>Dirancang supaya proses pembelian mudah dipahami dari awal sampai selesai.</p></div></div><div class="v18-testimonials"><article><div class="v18-stars">★★★★★</div><p>“Checkout-nya simpel dan status order gampang dipantau. Tidak perlu bingung tanya progres.”</p><span><b>R</b><strong>Pelanggan Streaming</strong></span></article><article><div class="v18-stars">★★★★★</div><p>“Pilihan produk jelas, benefit dan ketentuan terlihat sebelum pembayaran.”</p><span><b>A</b><strong>Pelanggan AI Tools</strong></span></article><article><div class="v18-stars">★★★★★</div><p>“Untuk proses manual, informasi order tetap tersimpan rapi di dashboard.”</p><span><b>D</b><strong>Pelanggan Top Up</strong></span></article></div></div></section>`;
+}
+function faqSection(){
+  return `<section class="v18-faq"><div class="wrap v18-faq-grid"><div><span class="v18-mini-kicker">FAQ</span><h2>Pertanyaan yang sering ditanyakan</h2><p>Beberapa hal penting sebelum melakukan pembelian.</p><a class="btn light small" href="#bantuan">Buka pusat bantuan</a></div><div class="v18-faq-list"><details open><summary>Bagaimana cara membeli produk?</summary><p>Pilih produk, login atau daftar, isi data checkout, lalu selesaikan pembayaran. Status order akan muncul di dashboard.</p></details><details><summary>Bagaimana jika stok produk habis?</summary><p>Tombol pembelian akan dinonaktifkan sampai admin menambahkan stok kembali.</p></details><details><summary>Apakah pembayaran diproses otomatis?</summary><p>Jika mode Midtrans aktif, pembayaran diverifikasi otomatis melalui Midtrans Snap. Toko juga dapat menggunakan transfer manual sesuai pengaturan admin.</p></details><details><summary>Bagaimana proses produk Top Up manual?</summary><p>Data login yang diperlukan diminta saat checkout, disimpan terenkripsi, dan tidak boleh berisi OTP atau recovery code.</p></details></div></div></section>`;
+}
 function catalogPage(){
   const cats = ['Semua', ...new Set(state.catalog.products.map(p=>p.category))];
-  return hero() + (state.catalog.settings.promoBanner?`<div class="promo-strip"><div class="wrap"><strong>✦ Promo Uply</strong><span>${esc(state.catalog.settings.promoBanner)}</span><button type="button" data-scroll-products>Lihat produk →</button></div></div>`:'') + `<section class="catalog-search-band"><div class="wrap">
-    <div class="catalog-search-box"><span>⌕</span><input id="search" placeholder="Cari Netflix, AI, top up, layanan digital…" value="${esc(state.search)}"><button class="btn small" type="button" data-focus-products>Cari</button></div>
-    <div class="quick-categories"><span>Cepat:</span>${cats.slice(1,7).map(c=>`<button class="quick-chip" data-filter="${esc(c)}">${esc(c)}</button>`).join('')}</div>
-  </div></section>
-  <section id="produk" class="section product-section"><div class="wrap">
-    <div class="section-head product-heading"><div><div class="section-kicker">Produk Digital Premium</div><h2>Koleksi pilihan Uply Digital</h2><p>Temukan produk yang sesuai kebutuhanmu dengan proses pembelian yang lebih praktis.</p></div><div class="catalog-count">${state.catalog.products.length} produk</div></div>
+  return hero()+trustStrip()+popularCategories()+`<section id="produk" class="section v18-products"><div class="wrap">
+    <div class="section-head v18-section-head v18-products-head"><div><span class="v18-mini-kicker">Produk unggulan</span><h2>Pilihan digital untuk kebutuhanmu</h2><p>Harga, benefit, stok, dan ketentuan ditampilkan jelas sebelum checkout.</p></div><div class="v18-products-actions"><div class="v18-search"><span>⌕</span><input id="search" placeholder="Cari produk digital…" value="${esc(state.search)}"></div><span class="catalog-count">${state.catalog.products.length} produk</span></div></div>
     ${state.catalog.settings.notice?`<div class="notice">${esc(state.catalog.settings.notice)}</div>`:''}
     ${!state.catalog.settings.storeOpen?`<div class="notice warn">Toko sedang menutup pesanan baru.</div>`:''}
-    <div class="chips category-tabs">${cats.map(c=>`<button class="chip ${state.filter===c?'active':''}" data-filter="${esc(c)}">${esc(c)}</button>`).join('')}</div>
-    <div class="grid product-grid-v11" id="productGrid">${productCards()}</div>
-  </div></section>` + popularCategories() + valueSection();
+    <div class="chips category-tabs v18-tabs">${cats.map(c=>`<button class="chip ${state.filter===c?'active':''}" data-filter="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+    <div class="grid product-grid-v11 v18-product-grid" id="productGrid">${productCards()}</div>
+  </div></section>`+promoSection()+socialProofSection()+faqSection();
 }
 function helpPage(){
-  return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Bantuan</div><h1>Belanja lebih jelas.</h1><p>Pembayaran bisa transfer manual atau otomatis melalui Xendit, tergantung pengaturan toko.</p></div>
+  return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Bantuan</div><h1>Belanja lebih jelas.</h1><p>Pembayaran bisa transfer manual atau otomatis melalui Midtrans Snap, tergantung pengaturan toko.</p></div>
   <div class="guide-grid">
     <div class="panel guide-card"><b>01</b><h3>Buat akun</h3><p>Daftar sekali menggunakan email dan password.</p></div>
     <div class="panel guide-card"><b>02</b><h3>Pilih & checkout</h3><p>Pilih produk, isi kontak penerima, lalu buat pesanan.</p></div>
@@ -239,27 +259,24 @@ function productDetailPage(id){
   if(!p) return `<section class="page"><div class="wrap empty"><h2>Produk tidak ditemukan</h2><a class="btn" href="#katalog">Kembali ke produk</a></div></section>`;
   const stockText=p.stock===-1?'Stok tersedia':p.stock>0?`${p.stock} unit tersedia`:'Stok habis';
   const maxQty=p.stock>0?Math.max(1,Math.min(5,Number(p.stock))):5;
-  return `<section class="page product-detail-page"><div class="wrap">
-    <div class="breadcrumb"><a href="#katalog">← Kembali ke Produk</a></div>
-    <div class="product-detail-grid">
-      <div class="product-gallery">
-        <div class="product-visual-main product-photo-stage"><span class="visual-badge">${esc(p.bestSeller?'Terlaris':(p.badge||'Uply Digital'))}</span>${productThumb(p,'detail-main-thumb')}<span class="visual-count">Produk Uply</span></div>
-        <div class="product-thumbs"><button class="active">${productThumb(p,'detail-mini-thumb')}</button><button><span class="thumb-art alt-a">✓</span></button><button><span class="thumb-art alt-b">★</span></button></div>
-      </div>
-      <div class="product-info-stack">
-        <div class="panel product-title-card"><div class="meta"><span class="badge">${esc(p.category)}</span><span>${p.bestSeller?'★ Terlaris':'★ Produk Uply'}</span></div><h1>${esc(p.name)}</h1><p>${esc(p.description)}</p>${p.requiresLoginCredentials?'<div class="notice warn"><strong>Proses manual via login.</strong><br>Data login diminta saat checkout dan disimpan terenkripsi sampai pesanan selesai. Jangan pernah kirim OTP atau recovery code.</div>':''}</div>
-        <div class="panel"><div class="section-label">PILIH PAKET</div><label class="variant-card selected"><input type="radio" checked name="variant"><span><strong>${esc(p.duration)}</strong><small>${esc((p.benefits||[])[0]||'Paket digital Uply')}</small></span><b>${money(p.price)}</b><em>${esc(stockText)}</em></label></div>
-        <div class="panel"><div class="section-label">FITUR UTAMA</div><div class="feature-grid">${(p.benefits||[]).slice(0,6).map(x=>`<span>✓ ${esc(x)}</span>`).join('')||'<span>✓ Proses dibantu admin</span>'}</div></div>
-        <div class="panel buy-panel"><div class="section-label">PESAN SEKARANG</div><div class="stock-row"><span>Stok tersedia</span><strong class="${p.stock===0?'stock-out':''}">${esc(stockText)}</strong></div><div class="qty-row"><span>Jumlah</span><div class="qty-control"><button type="button" data-detail-minus>−</button><b id="detailQty">1</b><button type="button" data-detail-plus data-max="${maxQty}">+</button></div></div><div class="buy-actions"><button class="btn dark full" type="button" data-add-cart="${esc(p.id)}" ${p.stock===0?'disabled':''}>Masukkan Keranjang</button><button class="btn full" type="button" data-order-now="${esc(p.id)}" ${p.stock===0?'disabled':''}>Order Sekarang</button></div><div class="buy-trust"><span>◈ Proses jelas</span><span>↻ Status ter-update</span><span>💬 Support admin</span></div></div>
+  const unavailable=!state.catalog.settings.storeOpen||p.stock===0;
+  return `<section class="page v18-detail-page"><div class="wrap">
+    <div class="breadcrumb v18-breadcrumb"><a href="#katalog">Beranda</a><span>›</span><a href="#katalog">${esc(p.category)}</a><span>›</span><b>${esc(p.name)}</b></div>
+    <div class="v18-detail-grid">
+      <div class="v18-detail-media"><div class="v18-main-shot">${productThumb(p,'detail-main-thumb')}<span class="v18-badge">${esc(p.bestSeller?'Best Seller':(p.badge||'Pilihan Uply'))}</span></div><div class="v18-mini-gallery"><button class="active">${productThumb(p,'detail-mini-thumb')}</button><button><span>✓</span><b>Benefit</b></button><button><span>🛡</span><b>Garansi</b></button></div><div class="v18-media-note"><b>🔒</b><span><strong>Transaksi lebih aman</strong><small>Data pesanan tersimpan di akun pelanggan.</small></span></div></div>
+      <div class="v18-detail-info">
+        <div class="v18-detail-category"><span>${esc(p.category)}</span><span class="v18-rating">★ 4.9 <small>Produk Uply</small></span></div>
+        <h1>${esc(p.name)}</h1><p class="v18-detail-desc">${esc(p.description)}</p>
+        <div class="v18-feature-cards">${(p.benefits||[]).slice(0,4).map((x,i)=>`<article><b>${['✓','⚡','◆','🛡'][i]||'✓'}</b><span>${esc(x)}</span></article>`).join('')}</div>
+        ${p.requiresLoginCredentials?'<div class="notice warn"><strong>Proses manual via login.</strong><br>Data login diminta saat checkout dan disimpan terenkripsi. Jangan pernah kirim OTP, recovery code, PIN, atau kode 2FA.</div>':''}
+        <div class="v18-package-block"><div class="v18-block-head"><strong>Pilih paket</strong><span>${esc(stockText)}</span></div><label class="v18-package selected"><input type="radio" checked><span><b>${esc(p.duration)}</b><small>${esc((p.benefits||[])[0]||'Paket digital Uply')}</small></span><strong>${money(p.price)}</strong></label></div>
+        <div class="v18-buy-box"><div><small>Harga</small><strong>${money(p.price)}</strong><span class="${p.stock===0?'stock-out':'v18-stock'}">● ${esc(stockText)}</span></div><div class="qty-control"><button type="button" data-detail-minus>−</button><b id="detailQty">1</b><button type="button" data-detail-plus data-max="${maxQty}">+</button></div><button class="btn dark" type="button" data-add-cart="${esc(p.id)}" ${unavailable?'disabled':''}>+ Keranjang</button><button class="btn" type="button" data-order-now="${esc(p.id)}" ${unavailable?'disabled':''}>Beli Sekarang →</button></div>
+        <div class="v18-purchase-trust"><span>✓ Status order jelas</span><span>✓ Support admin</span><span>✓ Ketentuan transparan</span></div>
       </div>
     </div>
-    <div class="product-lower-grid">
-      <section class="panel product-description"><div class="section-label">DESKRIPSI PRODUK</div><p>${esc(p.description)}</p><h3>Keunggulan Produk</h3><ul class="benefit-checks">${(p.benefits||[]).map(x=>`<li>✓ ${esc(x)}</li>`).join('')}</ul><div class="notice"><strong>Ketentuan & Garansi</strong><br>${esc(p.terms)}</div></section>
-      <section class="panel review-panel"><div class="section-label">REVIEW PELANGGAN</div><div class="review-empty"><b>💬</b><h3>Belum ada review</h3><p>Review pelanggan yang sudah menyelesaikan pesanan akan ditampilkan di sini pada versi berikutnya.</p></div></section>
-    </div>
+    <div class="v18-detail-lower"><section class="panel v18-description"><span class="v18-mini-kicker">Tentang produk</span><h2>Detail ${esc(p.name)}</h2><p>${esc(p.description)}</p><h3>Yang kamu dapatkan</h3><div class="v18-benefit-list">${(p.benefits||[]).map(x=>`<span>✓ ${esc(x)}</span>`).join('')}</div><div class="notice"><strong>Ketentuan & Garansi</strong><br>${esc(p.terms)}</div></section><aside class="panel v18-side-faq"><span class="v18-mini-kicker">Sebelum membeli</span><h3>Informasi penting</h3><details open><summary>Bagaimana prosesnya?</summary><p>Setelah pembayaran terverifikasi, order masuk ke tahap pemrosesan sesuai jenis produk.</p></details><details><summary>Bagaimana melihat status?</summary><p>Buka Dashboard atau Pesanan Saya setelah login.</p></details><details><summary>Butuh bantuan?</summary><p>Gunakan tombol support di website dan sertakan ID pesanan.</p></details></aside></div>
   </div></section>`;
 }
-
 function checkoutPage(id){
   const p = state.catalog.products.find(x=>x.id===id);
   if(!p) return `<section class="page"><div class="wrap empty"><h2>Produk tidak tersedia</h2><p>Produk mungkin sudah dinonaktifkan.</p><a class="btn" href="#katalog">Kembali ke produk</a></div></section>`;
@@ -280,8 +297,8 @@ function checkoutPage(id){
       ? `<section class="checkout-section panel"><div class="section-label">METODE PEMBAYARAN</div><div class="payment-provider"><span>🏦</span><div><strong>Transfer Bank</strong><small>Pilih rekening Uply Digital yang tersedia.</small></div></div><div class="payment-options">${state.catalog.banks.map((b,i)=>`<label class="payment-option"><input type="radio" name="bankId" value="${esc(b.id)}" ${i===0?'checked':''} required><span><b>${esc(b.name)}</b><small>${esc(b.holder)}</small></span><em>Transfer</em></label>`).join('')}</div></section>`
       : `<div class="notice warn"><strong>Checkout belum siap.</strong><br>Belum ada rekening pembayaran aktif.</div>`)
     : (paymentReady
-      ? `<section class="checkout-section panel"><div class="section-label">METODE PEMBAYARAN</div><div class="payment-provider"><span>▦</span><div><strong>Xendit</strong><small>Pembayaran otomatis via QRIS. Status pembayaran akan diperbarui melalui webhook Xendit.</small></div></div><label class="payment-option selected"><input type="radio" checked disabled><span><b>QRIS Xendit</b><small>QR pembayaran akan tampil di detail pesanan setelah order dibuat.</small></span><em>Otomatis</em></label><input type="hidden" name="paymentMethod" value="qris"><input type="hidden" name="paymentChannel" value=""></section>`
-      : `<div class="notice warn"><strong>Pembayaran otomatis belum siap.</strong><br>Periksa PAYMENT_MODE=xendit, BELIBAYAR_API_KEY, BELIBAYAR_SECRET_KEY, BELIBAYAR_WEBHOOK_SECRET, SITE_URL, serta IP whitelist Xendit.</div>`);
+      ? `<section class="checkout-section panel"><div class="section-label">METODE PEMBAYARAN</div><div class="payment-provider"><span>▦</span><div><strong>Midtrans Snap</strong><small>Pembayaran otomatis melalui halaman aman Midtrans. Metode yang muncul mengikuti channel aktif di akun Midtrans kamu.</small></div></div><label class="payment-option selected"><input type="radio" checked disabled><span><b>Midtrans Snap Checkout</b><small>QRIS, virtual account, e-wallet, dan metode lain akan tampil sesuai aktivasi merchant.</small></span><em>Otomatis</em></label><input type="hidden" name="paymentMethod" value="snap"><input type="hidden" name="paymentChannel" value=""></section>`
+      : `<div class="notice warn"><strong>Pembayaran otomatis belum siap.</strong><br>Periksa PAYMENT_MODE=midtrans, MIDTRANS_SERVER_KEY, MIDTRANS_IS_PRODUCTION, dan SITE_URL di Vercel Environment Variables.</div>`);
   return `<section class="page checkout-page"><div class="wrap checkout-wrap"><a class="breadcrumb" href="#produk/${encodeURIComponent(p.id)}">← Kembali ke Produk</a><div class="checkout-title"><div><div class="section-kicker">Checkout Uply Digital</div><h1>Selesaikan pesananmu</h1><p>Periksa metode pembayaran dan data kontak sebelum melanjutkan.</p></div><span class="checkout-secure">🔒 Checkout aman</span></div>
     <form id="checkoutForm" data-product-id="${esc(p.id)}" class="checkout-layout">
       <div class="stack">
@@ -336,7 +353,8 @@ function invoiceNumber(o){ return 'INV-' + String(o.id||'').replace(/^UPL-/,'');
 function invoiceChip(ps){ return `<span class="status ${esc(ps.cls)}">${esc(ps.label)}</span>`; }
 function invoiceDate(v){ return v ? dt(v) : '—'; }
 function paymentMethod(o){
-  if(o.paymentMode==='xendit') return `Xendit${o.paymentData?.channel?' · '+o.paymentData.channel:''}`;
+  if(o.paymentMode==='midtrans') return `Midtrans${o.paymentData?.method?' · '+o.paymentData.method:''}`;
+  if(o.paymentMode==='xendit') return 'Xendit (order lama)';
   if(o.bank?.name) return `Transfer ${o.bank.name}`;
   return 'Transfer bank';
 }
@@ -382,10 +400,13 @@ function orderDetail(id){
   if(o.status==='pending_payment' && o.paymentMode==='manual' && o.bank){
     pay=`<div class="panel"><h2>Pembayaran transfer</h2><div class="bank"><strong>${esc(o.bank.name)}</strong><div class="bank-number">${esc(o.bank.number)}</div><span>Atas nama ${esc(o.bank.holder)}</span></div><p>Total transfer: <strong>${money(o.total)}</strong></p><form id="proofForm" data-order="${esc(o.id)}"><label class="field">Bukti transfer (JPG/PNG/PDF maksimal ±1MB)<input type="file" name="proof" accept="image/jpeg,image/png,application/pdf" required></label><button class="btn" type="submit">Unggah bukti</button></form></div>`;
   }
-  if(o.status==='pending_payment' && o.paymentMode==='xendit'){
+  if(o.status==='pending_payment' && o.paymentMode==='midtrans'){
     const pd=o.paymentData||{};
-    const instruction=pd.paymentUrl?`<a class="btn full" href="${esc(pd.paymentUrl)}" rel="noopener">Bayar aman melalui Xendit →</a><p class="tiny center">Metode pembayaran yang aktif di akun Xendit akan tampil di halaman checkout.</p>`:'';
-    pay=`<div class="panel"><h2>Pembayaran otomatis · Xendit</h2><p>Status gateway: <strong>${esc(o.gatewayStatus||'belum dibuat')}</strong></p>${instruction}<div class="button-row">${!instruction?`<button class="btn" data-pay="${esc(o.id)}">Buat pembayaran</button>`:''}<button class="btn light" data-sync-pay="${esc(o.id)}">↻ Cek status pembayaran</button></div>${pd.transactionId?`<p class="tiny">ID transaksi: ${esc(pd.transactionId)}</p>`:''}<p class="tiny">Jika pembayaran sudah dilakukan tetapi status belum berubah, gunakan Cek status pembayaran.</p></div>`;
+    const instruction=pd.paymentUrl?`<a class="btn full" href="${esc(pd.paymentUrl)}" rel="noopener">Bayar aman melalui Midtrans →</a><p class="tiny center">Metode pembayaran yang aktif di akun Midtrans akan tampil di halaman Snap Checkout.</p>`:'';
+    pay=`<div class="panel"><h2>Pembayaran otomatis · Midtrans</h2><p>Status gateway: <strong>${esc(o.gatewayStatus||'belum dibuat')}</strong></p>${instruction}<div class="button-row">${!instruction?`<button class="btn" data-pay="${esc(o.id)}">Buat pembayaran</button>`:''}<button class="btn light" data-sync-pay="${esc(o.id)}">↻ Cek status pembayaran</button></div>${pd.transactionId?`<p class="tiny">ID transaksi: ${esc(pd.transactionId)}</p>`:''}<p class="tiny">Jika pembayaran sudah dilakukan tetapi status belum berubah, gunakan Cek status pembayaran.</p></div>`;
+  }
+  if(o.status==='pending_payment' && o.paymentMode==='xendit'){
+    pay=`<div class="notice warn"><strong>Order gateway versi lama.</strong><br>V20 sudah menggunakan Midtrans. Jangan lanjutkan link Xendit lama. Batalkan order ini lalu buat order baru agar pembayaran dibuat melalui Midtrans.</div>`;
   }
   const invoice=invoiceVisible(o)?invoiceHTML(o):'';
   const progressNotice=o.status==='review'?`<div class="notice ok"><strong>Bukti pembayaran sudah diterima.</strong><br>Invoice sementara sudah tersedia dan akan diperbarui setelah admin memverifikasi pembayaran.</div>`:o.status==='processing'?`<div class="notice ok"><strong>Pembayaran terverifikasi.</strong><br>Pesanan sedang diproses. Invoice sudah diperbarui otomatis.</div>`:o.status==='completed'?`<div class="notice ok"><strong>Pesanan selesai.</strong><br>Invoice final dan detail produk sudah tersedia di bawah.</div>`:'';
@@ -393,7 +414,7 @@ function orderDetail(id){
 }
 
 async function adminPage(){
-  if(!state.user || state.user.role!=='admin') return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Panel Admin</div><h1>Kelola Uply Digital</h1><p>Masuk menggunakan email dan password admin dari Netlify Environment Variables.</p></div><div class="panel" style="max-width:520px">${loginForm(true)}</div></div></section>`;
+  if(!state.user || state.user.role!=='admin') return `<section class="page"><div class="wrap"><div class="page-head"><div class="eyebrow dark">Panel Admin</div><h1>Kelola Uply Digital</h1><p>Masuk menggunakan email dan password admin dari Vercel Environment Variables.</p></div><div class="panel" style="max-width:520px">${loginForm(true)}</div></div></section>`;
   state.admin = await api('adminData');
   const tabs = [['overview','Ringkasan'],['orders','Pesanan'],['products','Produk'],['inventory','Inventory'],['customers','Pelanggan'],['settings','Pengaturan'],['audit','Aktivitas']];
   return `<section class="page admin-page"><div class="wrap"><div class="page-head admin-title-row"><div><div class="eyebrow dark">Panel Admin</div><h1>Ruang kelola toko</h1><p>${esc(state.admin.admin.email)} · pembayaran <strong>${esc(state.admin.settings.paymentMode)}</strong></p></div><div class="admin-head-actions"><button class="btn light small" data-admin-refresh>↻ Perbarui</button><a class="btn small" href="#katalog">Lihat toko</a></div></div><div class="admin-layout"><aside class="admin-nav">${tabs.map(([id,l])=>`<button data-admin-tab="${id}" class="${state.adminTab===id?'active':''}">${l}</button>`).join('')}</aside><div id="adminContent">${adminContent()}</div></div></div></section>`;
@@ -467,7 +488,7 @@ kode-003"></textarea></label><button class="btn light" type="submit">Import daft
 
 function editProduct(id){
   const p = state.admin.products.find(x=>x.id===id) || {id:'',name:'',category:'Digital',duration:'1 bulan',price:10000,description:'',benefits:[],terms:'',stock:-1,active:true,badge:'',icon:'generic',fulfillmentMode:'manual',thumbnail:'',featured:false,requiresLoginCredentials:false};
-  openModal(p.id?'Edit produk':'Tambah produk', `<form id="productForm" data-id="${esc(p.id)}"><label class="field">Nama produk<input name="name" value="${esc(p.name)}" required></label><div class="row"><label class="field">Kategori<input name="category" value="${esc(p.category)}" required><small>Kategori Top Up otomatis diproses manual.</small></label><label class="field">Durasi / paket<input name="duration" value="${esc(p.duration)}" required></label></div><div class="row"><label class="field">Harga<input name="price" type="number" min="1000" value="${p.price}" required></label><label class="field">Stok manual<input name="stock" type="number" min="-1" value="${p.stock}" required><small>-1 = tidak terbatas.</small></label></div><div class="thumbnail-upload-box"><div class="thumbnail-preview">${productThumb(p,'admin-thumb-preview')}</div><div class="thumbnail-upload-fields"><label class="field">Upload thumbnail<input name="thumbnailFile" type="file" accept="image/jpeg,image/png,image/webp"><small>JPG, PNG, atau WebP · maksimal 1 MB. Upload baru akan mengganti thumbnail tersimpan.</small></label><label class="field">Atau URL/path thumbnail<input name="thumbnail" value="${esc(p.hasUploadedThumbnail?'':(p.thumbnail||''))}" placeholder="/assets/products/produk.svg atau https://..."><small>Boleh dikosongkan jika memakai file upload.</small></label></div></div><label class="field">Deskripsi<input name="description" value="${esc(p.description)}"></label><label class="field">Benefit (satu per baris)<textarea name="benefits">${esc((p.benefits||[]).join('\n'))}</textarea></label><label class="field">Ketentuan<textarea name="terms">${esc(p.terms)}</textarea></label><div class="row"><label class="field">Badge<input name="badge" value="${esc(p.badge)}" placeholder="Favorit / Promo"></label><label class="field">Ikon<select name="icon">${['generic','netflix','youtube','ai','stars'].map(x=>`<option ${p.icon===x?'selected':''}>${x}</option>`).join('')}</select></label></div><label class="field">Mode pengiriman<select name="fulfillmentMode"><option value="manual" ${p.fulfillmentMode==='manual'?'selected':''}>Manual oleh admin</option><option value="inventory" ${p.fulfillmentMode==='inventory'?'selected':''}>Inventory otomatis</option></select><small>Untuk kategori Top Up backend selalu memaksa mode Manual.</small></label><label class="check"><input name="requiresLoginCredentials" type="checkbox" ${p.requiresLoginCredentials?'checked':''}> Memerlukan email + password akun pelanggan untuk proses manual</label><label class="check"><input name="featured" type="checkbox" ${p.featured?'checked':''}> Jadikan produk unggulan di homepage</label><label class="check"><input name="active" type="checkbox" ${p.active?'checked':''}> Tampilkan produk di toko</label><button class="btn full" type="submit">Simpan produk</button></form>`);
+  openModal(p.id?'Edit produk':'Tambah produk', `<form id="productForm" data-id="${esc(p.id)}"><label class="field">Nama produk<input name="name" value="${esc(p.name)}" required></label><div class="row"><label class="field">Kategori<input name="category" value="${esc(p.category)}" required><small>Kategori Top Up otomatis diproses manual.</small></label><label class="field">Durasi / paket<input name="duration" value="${esc(p.duration)}" required></label></div><div class="row"><label class="field">Harga<input name="price" type="number" min="1000" value="${p.price}" required></label><label class="field">Stok manual<input name="stock" type="number" min="-1" value="${p.stock}" required><small>-1 = tidak terbatas.</small></label></div><div class="thumbnail-upload-box"><div class="thumbnail-preview">${productThumb(p,'admin-thumb-preview')}</div><div class="thumbnail-upload-fields"><label class="field">Upload thumbnail<input name="thumbnailFile" type="file" accept="image/jpeg,image/png,image/webp"><small>JPG, PNG, atau WebP · maksimal 1 MB. Upload baru akan mengganti thumbnail tersimpan.</small></label><label class="field">Atau URL/path thumbnail<input name="thumbnail" value="${esc(p.hasUploadedThumbnail?'':(p.thumbnail||''))}" placeholder="/assets/products/produk.svg atau https://..."><small>Boleh dikosongkan jika memakai file upload.</small></label></div>${p.hasUploadedThumbnail?`<label class="check compact-check"><input name="clearUploadedThumbnail" type="checkbox"> Hapus thumbnail upload yang tersimpan</label>`:''}</div><label class="field">Deskripsi<input name="description" value="${esc(p.description)}"></label><label class="field">Benefit (satu per baris)<textarea name="benefits">${esc((p.benefits||[]).join('\n'))}</textarea></label><label class="field">Ketentuan<textarea name="terms">${esc(p.terms)}</textarea></label><div class="row"><label class="field">Badge<input name="badge" value="${esc(p.badge)}" placeholder="Favorit / Promo"></label><label class="field">Ikon<select name="icon">${['generic','netflix','youtube','ai','stars'].map(x=>`<option ${p.icon===x?'selected':''}>${x}</option>`).join('')}</select></label></div><label class="field">Mode pengiriman<select name="fulfillmentMode"><option value="manual" ${p.fulfillmentMode==='manual'?'selected':''}>Manual oleh admin</option><option value="inventory" ${p.fulfillmentMode==='inventory'?'selected':''}>Inventory otomatis</option></select><small>Untuk kategori Top Up backend selalu memaksa mode Manual.</small></label><label class="check"><input name="requiresLoginCredentials" type="checkbox" ${p.requiresLoginCredentials?'checked':''}> Memerlukan email + password akun pelanggan untuk proses manual</label><label class="check"><input name="featured" type="checkbox" ${p.featured?'checked':''}> Jadikan produk unggulan di homepage</label><label class="check"><input name="active" type="checkbox" ${p.active?'checked':''}> Tampilkan produk di toko</label><button class="btn full" type="submit">Simpan produk</button></form>`);
 }
 
 function adjustStockModal(id){
@@ -574,7 +595,7 @@ document.addEventListener('click', async e => {
     state.pendingCheckout=''; location.hash='#checkout/'+encodeURIComponent(id); if((location.hash||'')==='#checkout/'+encodeURIComponent(id)) await route(); return;
   }
   const checkoutLogin=e.target.closest('[data-checkout-login]'); if(checkoutLogin){state.pendingCheckout=checkoutLogin.dataset.checkoutLogin;openModal('Masuk untuk checkout',loginForm(false));return;}
-  const pay = e.target.closest('[data-pay]'); if(pay){ try{const r=await api('retryPayment',{orderId:pay.dataset.pay}); if(r.paymentUrl){location.href=r.paymentUrl;}else{state.orders=await api('orders');await route();msg(r.paymentData?.qrUrl?'QRIS Xendit berhasil dibuat. Silakan scan QR.':'Instruksi pembayaran berhasil dibuat.');}}catch(err){msg(err.message)} return; }
+  const pay = e.target.closest('[data-pay]'); if(pay){ try{const r=await api('retryPayment',{orderId:pay.dataset.pay}); if(r.paymentUrl){location.href=r.paymentUrl;}else{state.orders=await api('orders');await route();msg(r.paymentData?.qrUrl?'Pembayaran Midtrans berhasil dibuat. Silakan lanjutkan ke halaman pembayaran.':'Instruksi pembayaran berhasil dibuat.');}}catch(err){msg(err.message)} return; }
   const syncPay=e.target.closest('[data-sync-pay]'); if(syncPay){try{const r=await api('syncPaymentStatus',{orderId:syncPay.dataset.syncPay});state.orders=await api('orders');await route();msg(r.state==='success'?'Pembayaran sudah terverifikasi.':'Status pembayaran diperbarui.');}catch(err){msg(err.message)}return;}
   const cancel = e.target.closest('[data-cancel]'); if(cancel){ if(confirm('Batalkan pesanan ini?')){try{await api('cancelOrder',{orderId:cancel.dataset.cancel});state.orders=await api('orders');await route();msg('Pesanan dibatalkan.')}catch(err){msg(err.message)}}return; }
   const cred = e.target.closest('[data-order-credentials]'); if(cred){ try{const r=await api('getOrderCredentials',{orderId:cred.dataset.orderCredentials});openModal('Login akun untuk proses',`<div class="notice warn"><strong>Data sensitif.</strong><br>Gunakan hanya untuk pesanan ini. Jangan meminta OTP, recovery code, atau kode 2FA.</div><label class="field">Email<input readonly value="${esc(r.email)}"></label><label class="field">Password<div class="copy-secret-row"><input readonly type="password" id="credentialPassword" value="${esc(r.password)}"><button class="btn light small" type="button" data-copy="${esc(r.password)}">Salin</button></div></label>`);}catch(err){msg(err.message)} return; }
@@ -614,14 +635,22 @@ document.addEventListener('submit', async e => {
       state.orders=await api('orders');
       state.checkoutQty=1;if(state.cart?.productId===f.dataset.productId){state.cart=null;saveCart();}
       if(r.paymentUrl){msg('Pesanan dibuat. Membuka pembayaran…');setTimeout(()=>location.assign(r.paymentUrl),650)}
-      else{location.hash='#pesanan/'+encodeURIComponent(r.order.id);await route();msg(r.paymentError?`Pesanan dibuat, tetapi Xendit error: ${r.paymentError}`:'Pesanan berhasil dibuat. Lanjutkan pembayaran.')}
+      else{location.hash='#pesanan/'+encodeURIComponent(r.order.id);await route();msg(r.paymentError?`Pesanan dibuat, tetapi Midtrans error: ${r.paymentError}`:'Pesanan berhasil dibuat. Lanjutkan pembayaran.')}
     } else if(f.id==='proofForm'){
       const file=f.elements.proof.files[0];if(!file)throw Error('Pilih file bukti.');if(file.size>1100000)throw Error('Ukuran bukti maksimal sekitar 1 MB.');
       const base64=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(file)});
       await api('uploadProof',{orderId:f.dataset.order,fileName:file.name,mime:file.type,base64});state.orders=await api('orders');await route();msg('Bukti pembayaran dikirim.');
     } else if(f.id==='productForm'){
-      await api('saveProduct',{product:{id:f.dataset.id,name:g('name'),category:g('category'),duration:g('duration'),price:Number(g('price')),stock:Number(g('stock')),description:g('description'),benefits:g('benefits').split('\n').map(x=>x.trim()).filter(Boolean),terms:g('terms'),badge:g('badge'),icon:g('icon'),thumbnail:g('thumbnail'),featured:fd.has('featured'),requiresLoginCredentials:fd.has('requiresLoginCredentials'),fulfillmentMode:g('fulfillmentMode'),active:fd.has('active')}});
-      closeModal();await refreshAdmin();state.catalog=null;msg('Produk disimpan.');
+      const thumbFile=f.elements.thumbnailFile?.files?.[0]||null;
+      let thumbnailUpload=null;
+      if(thumbFile){
+        if(!['image/jpeg','image/png','image/webp'].includes(thumbFile.type)) throw Error('Thumbnail harus JPG, PNG, atau WebP.');
+        if(thumbFile.size>1048576) throw Error('Ukuran thumbnail maksimal 1 MB.');
+        const base64=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]||'');r.onerror=()=>reject(Error('Gagal membaca file thumbnail.'));r.readAsDataURL(thumbFile)});
+        thumbnailUpload={mime:thumbFile.type,base64};
+      }
+      await api('saveProduct',{product:{id:f.dataset.id,name:g('name'),category:g('category'),duration:g('duration'),price:Number(g('price')),stock:Number(g('stock')),description:g('description'),benefits:g('benefits').split('\n').map(x=>x.trim()).filter(Boolean),terms:g('terms'),badge:g('badge'),icon:g('icon'),thumbnail:g('thumbnail'),thumbnailUpload,clearUploadedThumbnail:fd.has('clearUploadedThumbnail'),featured:fd.has('featured'),requiresLoginCredentials:fd.has('requiresLoginCredentials'),fulfillmentMode:g('fulfillmentMode'),active:fd.has('active')}});
+      closeModal();await refreshAdmin();await loadCatalog();msg('Produk disimpan.');
     } else if(f.id==='stockAdjustForm'){
       const operation=g('operation'), amount=Number(g('amount'));const updated=await api('adjustProductStock',{productId:f.dataset.id,operation,amount});closeModal();await refreshAdmin();await loadCatalog();msg(`Stok ${updated.name} sekarang ${updated.stock===-1?'Tanpa Batas':updated.stock}.`);
     } else if(f.id==='bankForm'){
@@ -652,6 +681,6 @@ async function start(){
     }
     await route();
   }
-  catch(e){ app.innerHTML = `<section class="page"><div class="wrap"><div class="notice error"><strong>Website belum terhubung dengan benar.</strong><br>${esc(e.message)}</div><p class="tiny">Periksa Environment Variables, database, dan deployment Netlify.</p></div></section>`; }
+  catch(e){ app.innerHTML = `<section class="page"><div class="wrap"><div class="notice error"><strong>Website belum terhubung dengan benar.</strong><br>${esc(e.message)}</div><p class="tiny">Periksa Environment Variables, database, dan deployment Vercel.</p></div></section>`; }
 }
 start();

@@ -1,38 +1,30 @@
-UPLY DIGITAL V15 — SETUP CEPAT
+UPLY DIGITAL V20 — VERCEL
+==========================
 
-1. Replace seluruh file project GitHub dengan isi V15 lalu commit ke branch main.
-2. Di Vercel, Environment Variables minimal:
+1. Extract ZIP.
+2. Upload SEMUA isi folder V20 ke root repository GitHub.
+3. Import repository ke Vercel (Framework Preset: Other).
+4. Tambahkan Environment Variables:
+
    DATABASE_URL
-   ADMIN_EMAIL
-   ADMIN_PASSWORD
    SESSION_SECRET
    CREDENTIAL_ENCRYPTION_KEY
-   SITE_URL
-   ALLOWED_ORIGIN
+   ADMIN_EMAIL
+   ADMIN_PASSWORD
+   PAYMENT_MODE=midtrans
+   MIDTRANS_SERVER_KEY=Mid-server-xxxxxxxx
+   MIDTRANS_IS_PRODUCTION=true
+   SITE_URL=https://DOMAIN-KAMU.vercel.app
+   ALLOWED_ORIGIN=https://DOMAIN-KAMU.vercel.app
 
-3. Untuk BeliBayar Sandbox:
-   PAYMENT_MODE=belibayar
-   BELIBAYAR_API_KEY=byr_test_...
-   BELIBAYAR_SECRET_KEY=secret sandbox dari dashboard
-   BELIBAYAR_WEBHOOK_SECRET=webhook secret dari dashboard
-   BELIBAYAR_IS_PRODUCTION=false
-   BELIBAYAR_CALLBACK_URL=https://DOMAIN-KAMU/api/payment-webhook
-   BELIBAYAR_PAYMENT_METHOD=qris
+5. Redeploy.
+6. Cek: https://DOMAIN-KAMU.vercel.app/api/health
+7. Pastikan database=connected dan payment.ready=true.
+8. Di Midtrans Production set Notification URL:
+   https://DOMAIN-KAMU.vercel.app/api/payment-webhook
+9. Buat order BARU untuk test.
 
-4. PENTING — IP WHITELIST BELIBAYAR
-   Direct API BeliBayar mewajibkan IP whitelist.
-   Vercel Function biasa memakai outbound IP dinamis.
-   Agar pembayaran otomatis stabil, aktifkan Vercel Static IPs (Pro+) atau gunakan backend/proxy yang punya IP statis.
-   Copy Static IP Vercel lalu masukkan ke BeliBayar > Kredensial > IP Whitelist.
+Thumbnail produk default V20 sudah memakai identitas visual yang sesuai:
+Netflix merah N, Google AI multicolor, YouTube play merah, Facebook Stars biru+bintang, IMEI phone+unlock.
 
-5. Redeploy Vercel.
-6. Buka /api/health. Pastikan payment.ready=true dan provider=belibayar.
-7. Test transaksi Sandbox terlebih dahulu.
-8. Di dashboard BeliBayar, simulasi payment success lalu cek order berubah menjadi Sedang Diproses/Selesai.
-
-STOCK:
-Panel Admin > Produk > Tambah stok > isi jumlah > Simpan stok.
-Jika stok awal Tanpa Batas (-1), Tambah stok akan mengubahnya menjadi jumlah yang dimasukkan.
-
-THUMBNAIL:
-Panel Admin > Produk > Edit > Upload thumbnail > pilih JPG/PNG/WebP <=1MB > Simpan produk.
+Panduan lengkap: TUTORIAL-VERCEL.md
