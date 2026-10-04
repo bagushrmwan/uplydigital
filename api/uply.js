@@ -1,7 +1,7 @@
 import { ensureSchema, q, pool, getSettings, audit } from '../lib/db.js';
 import { id, normalizeEmail, validEmail, hashPassword, verifyPassword, safeEqual, createSession, requireAuth, requireAdmin, destroySession, securityReady, credentialSecurityReady, encryptCredentialPayload, decryptCredentialPayload } from '../lib/security.js';
-import { createSnap, getTransactionStatus, midtransEnabled, paymentMode as configuredPaymentMode } from '../lib/midtrans.js';
-import { applyMidtransStatus, autoFulfillOrder } from '../lib/payment-state.js';
+import { createPayment, getPaymentStatus, xenditEnabled, paymentMode as configuredPaymentMode } from '../lib/xendit.js';
+import { applyXenditStatus, autoFulfillOrder } from '../lib/payment-state.js';
 import { sendEmail } from '../lib/email.js';
 
 function safeError(message,status=400){ const e=new Error(message); e.safe=true; e.status=status; return e; }
@@ -12,10 +12,14 @@ function phone(v,required=false){
   if(!p&&!required) return ''; if(!/^[1-9]\d{8,14}$/.test(p)) throw safeError('Nomor WhatsApp tidak valid.'); return p;
 }
 function publicProduct(r,availableInventory){
-  return {id:r.id,name:r.name,category:r.category,duration:r.duration,price:Number(r.price),description:r.description,benefits:Array.isArray(r.benefits)?r.benefits:[],terms:r.terms,stock:r.fulfillment_mode==='inventory'?availableInventory:Number(r.stock),active:r.active,badge:r.badge,icon:r.icon,fulfillmentMode:r.fulfillment_mode,thumbnail:r.thumbnail_url||'',featured:!!r.featured,requiresLoginCredentials:!!r.requires_login_credentials,soldCount:Number(r.sold_count||0),bestSeller:!!r.best_seller};
+  const uploaded=!!r.thumbnail_data;
+  const thumbnail=uploaded?`/api/product-image?id=${encodeURIComponent(r.id)}&v=${encodeURIComponent(new Date(r.updated_at||Date.now()).getTime())}`:(r.thumbnail_url||'');
+  return {id:r.id,name:r.name,category:r.category,duration:r.duration,price:Number(r.price),description:r.description,benefits:Array.isArray(r.benefits)?r.benefits:[],terms:r.terms,stock:r.fulfillment_mode==='inventory'?availableInventory:Number(r.stock),active:r.active,badge:r.badge,icon:r.icon,fulfillmentMode:r.fulfillment_mode,thumbnail,hasUploadedThumbnail:uploaded,featured:!!r.featured,requiresLoginCredentials:!!r.requires_login_credentials,soldCount:Number(r.sold_count||0),bestSeller:!!r.best_seller};
 }
 function publicOrder(o,admin=false){
-  return {id:o.id,userId:admin?o.user_id:undefined,email:o.email,name:o.name,phone:o.phone,channel:o.channel,productId:o.product_id,productName:o.product_name,productThumbnail:o.product_thumbnail||'',duration:o.duration,quantity:Number(o.quantity),price:Number(o.price),total:Number(o.total),status:o.status,paymentMode:o.payment_mode,gatewayStatus:o.gateway_status,paymentUrl:o.payment_url,createdAt:o.created_at,expiresAt:o.expires_at,updatedAt:o.updated_at,paymentSubmittedAt:o.payment_submitted_at,paymentVerifiedAt:o.payment_verified_at,processingAt:o.processing_at,completedAt:o.completed_at,hasProof:!!o.proof_name,proofName:o.proof_name,delivery:o.delivery,note:o.note,hasCredentials:admin?!!o.credentials_enc:undefined,credentialsStatus:admin?(o.credentials_status||''):undefined,credentialsViewedAt:admin?o.credentials_viewed_at:undefined,bank:o.bank_id?{id:o.bank_id,name:o.bank_name,number:o.bank_number,holder:o.bank_holder}:null};
+  const gp=o.gateway_payload&&typeof o.gateway_payload==='object'?o.gateway_payload:{};
+  const paymentData={method:o.gateway_payment_method||gp.payment_method||'',channel:o.gateway_payment_channel||gp.payment_channel||'',transactionId:o.gateway_transaction_id||gp.transaction_id||'',qrUrl:gp.qr_url||'',qrContent:gp.qr_content||'',vaNumber:gp.va_number||'',paymentUrl:o.payment_url||gp.payment_url||'',expiredAt:gp.expired_at||null,fee:Number(gp.merchant_fee||0),feeBearer:gp.fee_bearer||'',amount:Number(gp.amount||o.total||0)};
+  return {id:o.id,userId:admin?o.user_id:undefined,email:o.email,name:o.name,phone:o.phone,channel:o.channel,productId:o.product_id,productName:o.product_name,productThumbnail:o.product_thumbnail||'',duration:o.duration,quantity:Number(o.quantity),price:Number(o.price),total:Number(o.total),status:o.status,paymentMode:o.payment_mode,gatewayStatus:o.gateway_status,paymentUrl:o.payment_url, paymentData,createdAt:o.created_at,expiresAt:o.expires_at,updatedAt:o.updated_at,paymentSubmittedAt:o.payment_submitted_at,paymentVerifiedAt:o.payment_verified_at,processingAt:o.processing_at,completedAt:o.completed_at,hasProof:!!o.proof_name,proofName:o.proof_name,delivery:o.delivery,note:o.note,hasCredentials:admin?!!o.credentials_enc:undefined,credentialsStatus:admin?(o.credentials_status||''):undefined,credentialsViewedAt:admin?o.credentials_viewed_at:undefined,bank:o.bank_id?{id:o.bank_id,name:o.bank_name,number:o.bank_number,holder:o.bank_holder}:null};
 }
 function originHeaders(req){
   const origin=String(req.headers.origin||''); const allowed=process.env.ALLOWED_ORIGIN||process.env.SITE_URL||'';
@@ -48,21 +52,21 @@ async function catalog(){
   const inv=Object.fromEntries(ir.rows.map(x=>[x.product_id,Number(x.available)]));
   const best=new Set(sales.rows.filter(x=>Number(x.n)>0).map(x=>x.product_id));
   const products=pr.rows.map(p=>publicProduct({...p,best_seller:best.has(p.id)},inv[p.id]||0));
-  const paymentMode=configuredPaymentMode()==='midtrans'?'midtrans':'manual';
-  return {products,banks:br.rows,settings:{storeName:s.storeName||'Uply Digital',whatsapp:s.whatsapp||'',hours:s.hours||'',storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,notice:s.notice||'',promoBanner:s.promoBanner||'',paymentMode,paymentReady:paymentMode==='manual'||midtransEnabled()}};
+  const paymentMode=configuredPaymentMode()==='xendit'?'xendit':'manual';
+  return {products,banks:br.rows,settings:{storeName:s.storeName||'Uply Digital',whatsapp:s.whatsapp||'',hours:s.hours||'',storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,notice:s.notice||'',promoBanner:s.promoBanner||'',paymentMode,paymentReady:paymentMode==='manual'||xenditEnabled(),paymentProvider:paymentMode==='xendit'?'Xendit':'Transfer manual'}};
 }
 async function getUserById(userId){ const {rows}=await q('SELECT id,email,name,phone,created_at FROM users WHERE id=$1 LIMIT 1',[userId]); return rows[0]; }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-async function createMidtransForOrder(order,{forceNew=false}={}){
-  if(!midtransEnabled()) throw safeError('Pembayaran otomatis belum siap. Periksa PAYMENT_MODE dan MIDTRANS_SERVER_KEY.',500);
-  if(order.payment_url && !forceNew) return order.payment_url;
-  const currentAttempt=Math.max(0,Number(order.gateway_attempt)||0);
-  const attempt=currentAttempt+1;
-  const gatewayOrderId=`${order.id}-P${attempt}`.slice(0,50);
-  await q(`UPDATE orders SET payment_url='',gateway_status='creating',gateway_order_id=$2,gateway_attempt=$3,updated_at=NOW() WHERE id=$1`,[order.id,gatewayOrderId,attempt]);
-  const snap=await createSnap({...order,id:gatewayOrderId,callback_order_id:order.id});
-  await q(`UPDATE orders SET payment_url=$2,gateway_status='created',updated_at=NOW() WHERE id=$1`,[order.id,snap.redirect_url]);
-  return snap.redirect_url;
+async function createXenditForOrder(order,{method,channel}={}){
+  if(!xenditEnabled()) throw safeError('Pembayaran Xendit belum siap. Periksa PAYMENT_MODE=xendit, XENDIT_SECRET_KEY, XENDIT_WEBHOOK_TOKEN, dan SITE_URL.',500);
+  const selectedMethod='hosted_checkout';
+  const selectedChannel='XENDIT';
+  await q(`UPDATE orders SET payment_url='',gateway_status='creating',gateway_order_id=id,gateway_payment_method=$2,gateway_payment_channel=$3,gateway_attempt=gateway_attempt+1,updated_at=NOW() WHERE id=$1`,[order.id,selectedMethod,selectedChannel]);
+  const fresh=(await q('SELECT * FROM orders WHERE id=$1',[order.id])).rows[0];
+  const payment=await createPayment(fresh,{method:selectedMethod,channel:selectedChannel});
+  const paymentUrl=String(payment.payment_link_url||'');
+  await q(`UPDATE orders SET payment_url=$2,gateway_status=$3,gateway_transaction_id=$4,gateway_order_id=id,gateway_payment_method=$5,gateway_payment_channel=$6,gateway_payload=$7::jsonb,updated_at=NOW() WHERE id=$1`,[order.id,paymentUrl,String(payment.status||'pending'),String(payment.payment_session_id||''),selectedMethod,selectedChannel,JSON.stringify(payment)]);
+  return {paymentUrl,paymentData:payment};
 }
 
 export default async function handler(req,res){
@@ -70,7 +74,7 @@ export default async function handler(req,res){
   if(req.method==='OPTIONS') return send(res,204,{},headers);
   if(req.method!=='POST') return send(res,405,{ok:false,error:'Gunakan POST.'},headers);
   try{
-    if(!securityReady()) throw safeError('SESSION_SECRET belum diatur di Vercel Environment Variables.',500);
+    if(!securityReady()) throw safeError('SESSION_SECRET belum diatur di Netlify Environment Variables.',500);
     await ensureSchema(); await expireOldOrders();
     const body=typeof req.body==='string'?JSON.parse(req.body||'{}'):(req.body||{});
     const action=text(body.action,80); const p=body.payload&&typeof body.payload==='object'?body.payload:{};
@@ -93,7 +97,7 @@ export default async function handler(req,res){
     }
     else if(action==='adminLogin'){
       const email=normalizeEmail(p.email), password=String(p.password||''); const ce=normalizeEmail(process.env.ADMIN_EMAIL); const cp=String(process.env.ADMIN_PASSWORD||'');
-      if(!validEmail(ce)||cp.length<8) throw safeError('ADMIN_EMAIL atau ADMIN_PASSWORD belum diatur di Vercel.',500);
+      if(!validEmail(ce)||cp.length<8) throw safeError('ADMIN_EMAIL atau ADMIN_PASSWORD belum diatur di Netlify.',500);
       if(!safeEqual(email,ce)||!safeEqual(password,cp)) throw safeError('Email atau password admin salah.',401);
       const token=await createSession({role:'admin',hours:8}); await audit(ce,'admin_login','',{}); data={token,user:{id:null,email:ce,name:'Admin Uply',phone:'',role:'admin'}};
     }
@@ -111,7 +115,7 @@ export default async function handler(req,res){
       if(p.agree!==true) throw safeError('Setujui ketentuan produk sebelum membuat pesanan.');
       const requestId=text(p.requestId,80); if(!/^[a-zA-Z0-9._-]{12,80}$/.test(requestId)) throw safeError('Muat ulang halaman lalu coba lagi.');
       const existing=await q('SELECT * FROM orders WHERE request_id=$1 AND user_id=$2 LIMIT 1',[requestId,u.id]);
-      if(existing.rowCount){data={order:publicOrder(existing.rows[0]),paymentUrl:existing.rows[0].payment_url||'',duplicate:true};}
+      if(existing.rowCount){data={order:publicOrder(existing.rows[0]),paymentUrl:existing.rows[0].payment_url||'',paymentData:existing.rows[0].gateway_payload||null,duplicate:true};}
       else {
         const qty=Number(p.quantity); if(!Number.isInteger(qty)||qty<1||qty>5) throw safeError('Jumlah produk harus 1–5.');
         const client=await pool.connect(); let order=null,prod=null,mode='manual';
@@ -134,8 +138,8 @@ export default async function handler(req,res){
             credentialsEnc=encryptCredentialPayload({email:accountEmail,password:accountPassword});
           }
 
-          const configuredMode=configuredPaymentMode()==='midtrans'?'midtrans':'manual';
-          if(configuredMode==='midtrans'&&!midtransEnabled()) throw safeError('Pembayaran otomatis dipilih tetapi MIDTRANS_SERVER_KEY belum valid. Periksa Environment Variables lalu Redeploy.',500);
+          const configuredMode=configuredPaymentMode()==='xendit'?'xendit':'manual';
+          if(configuredMode==='xendit'&&!xenditEnabled()) throw safeError('Pembayaran Xendit dipilih tetapi kredensial belum lengkap. Periksa XENDIT_SECRET_KEY, XENDIT_WEBHOOK_TOKEN, SITE_URL lalu deploy ulang.',500);
           mode=configuredMode; let bank={id:'',name:'',number:'',holder:''};
           if(mode==='manual'){
             const {rows:bs}=await client.query('SELECT * FROM banks WHERE id=$1 AND active=TRUE LIMIT 1',[text(p.bankId,100)]); if(!bs[0]) throw safeError('Rekening pembayaran tidak tersedia. Minta admin mengaktifkan minimal satu rekening.'); bank=bs[0];
@@ -147,42 +151,34 @@ export default async function handler(req,res){
             const reserved=await client.query('UPDATE products SET stock=stock-$2,updated_at=NOW() WHERE id=$1 AND stock>=$2 RETURNING stock',[prod.id,qty]);
             if(!reserved.rowCount) throw safeError('Stok berubah saat checkout dan sekarang tidak mencukupi. Silakan coba lagi.');
           }
-          const {rows:ors}=await client.query(`INSERT INTO orders(id,user_id,email,name,phone,channel,product_id,product_name,product_thumbnail,duration,quantity,price,total,bank_id,bank_name,bank_number,bank_holder,note,status,payment_mode,expires_at,request_id,stock_reserved,credentials_enc,credentials_status)
-            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'pending_payment',$19,NOW()+($20 || ' hours')::interval,$21,$22,$23,$24) RETURNING *`,[orderId,u.id,u.email,name,ph,channel,prod.id,prod.name,prod.thumbnail_url||'',prod.duration,qty,Number(prod.price),total,bank.id||'',bank.name||'',bank.number||'',bank.holder||'',customerNote,mode,String(hours),requestId,finiteManualStock,credentialsEnc,credentialsEnc?'encrypted':'']);
+          const selectedPayMethod=mode==='xendit'?'hosted_checkout':''; const selectedPayChannel=mode==='xendit'?'XENDIT':'';
+          const publicThumb=prod.thumbnail_data?`/api/product-image?id=${encodeURIComponent(prod.id)}&v=${encodeURIComponent(new Date(prod.updated_at||Date.now()).getTime())}`:(prod.thumbnail_url||'');
+          const {rows:ors}=await client.query(`INSERT INTO orders(id,user_id,email,name,phone,channel,product_id,product_name,product_thumbnail,duration,quantity,price,total,bank_id,bank_name,bank_number,bank_holder,note,status,payment_mode,expires_at,request_id,stock_reserved,credentials_enc,credentials_status,gateway_payment_method,gateway_payment_channel)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'pending_payment',$19,NOW()+($20 || ' hours')::interval,$21,$22,$23,$24,$25,$26) RETURNING *`,[orderId,u.id,u.email,name,ph,channel,prod.id,prod.name,publicThumb,prod.duration,qty,Number(prod.price),total,bank.id||'',bank.name||'',bank.number||'',bank.holder||'',customerNote,mode,String(hours),requestId,finiteManualStock,credentialsEnc,credentialsEnc?'encrypted':'',selectedPayMethod,selectedPayChannel]);
           order=ors[0]; await client.query('COMMIT');
         }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
 
-        let paymentUrl='',paymentError='';
-        if(mode==='midtrans'){
-          try{paymentUrl=await createMidtransForOrder(order); order=(await q('SELECT * FROM orders WHERE id=$1',[order.id])).rows[0];}
-          catch(e){
-            paymentError=e?.safe?e.message:'Midtrans belum dapat membuat transaksi.';
-            await q(`UPDATE orders SET gateway_status='error',note=CASE WHEN note='' THEN $2 ELSE note || E'\n' || $2 END,updated_at=NOW() WHERE id=$1`,[order.id,`Payment gateway: ${paymentError}`]);
-          }
+        let paymentUrl='',paymentData=null,paymentError='';
+        if(mode==='xendit'){
+          try{const created=await createXenditForOrder(order,{method:p.paymentMethod,channel:p.paymentChannel});paymentUrl=created.paymentUrl;paymentData=created.paymentData;order=(await q('SELECT * FROM orders WHERE id=$1',[order.id])).rows[0];}
+          catch(e){paymentError=e?.safe?e.message:'BeliBayar belum dapat membuat transaksi.';await q(`UPDATE orders SET gateway_status='error',note=CASE WHEN note='' THEN $2 ELSE note || E'\n' || $2 END,updated_at=NOW() WHERE id=$1`,[order.id,`Payment gateway BeliBayar: ${paymentError}`]);}
         }
         await audit(u.email,'order_created',order.id,{productId:prod.id,total:Number(order.total),mode});
         await sendEmail(u.email,`Pesanan ${order.id} dibuat`,`<h2>Pesanan Uply Digital dibuat</h2><p>${escapeHtml(prod.name)} · ${escapeHtml(prod.duration)}</p><p>Total: <strong>Rp${Number(order.total).toLocaleString('id-ID')}</strong></p><p>Status: menunggu pembayaran.</p>`);
-        data={order:publicOrder(order),paymentUrl:paymentUrl||order.payment_url||'',paymentError,duplicate:false};
+        data={order:publicOrder(order),paymentUrl:paymentUrl||order.payment_url||'',paymentData:paymentData||order.gateway_payload||null,paymentError,duplicate:false};
       }
     }
     else if(action==='retryPayment'){
-      const u=await requireAuth(req); const orderId=text(p.orderId,80); const {rows}=await q('SELECT * FROM orders WHERE id=$1 AND user_id=$2 LIMIT 1',[orderId,u.id]); const o=rows[0];
-      if(!o||o.payment_mode!=='midtrans'||o.status!=='pending_payment') throw safeError('Pembayaran tidak dapat dibuat ulang.');
-      if(o.payment_url){data={paymentUrl:o.payment_url,reused:true};}
-      else {const url=await createMidtransForOrder(o,{forceNew:true});data={paymentUrl:url,reused:false};}
+      const u=await requireAuth(req);const orderId=text(p.orderId,80);const {rows}=await q('SELECT * FROM orders WHERE id=$1 AND user_id=$2 LIMIT 1',[orderId,u.id]);const o=rows[0];
+      if(!o||o.payment_mode!=='xendit'||o.status!=='pending_payment') throw safeError('Pembayaran Xendit tidak dapat dibuat ulang.');
+      if(o.gateway_transaction_id&&o.gateway_payload&&Object.keys(o.gateway_payload).length){data={paymentUrl:o.payment_url||'',paymentData:o.gateway_payload,reused:true};}
+      else{const created=await createXenditForOrder(o,{method:o.gateway_payment_method,channel:o.gateway_payment_channel});data={paymentUrl:created.paymentUrl,paymentData:created.paymentData,reused:false};}
     }
     else if(action==='syncPaymentStatus'){
-      const u=await requireAuth(req); const orderId=text(p.orderId,80); const {rows}=await q('SELECT * FROM orders WHERE id=$1 AND user_id=$2 LIMIT 1',[orderId,u.id]); const o=rows[0];
-      if(!o||o.payment_mode!=='midtrans') throw safeError('Pesanan Midtrans tidak ditemukan.');
-      if(o.status==='completed') {data={order:publicOrder(o),state:'success'};}
-      else {
-        const gatewayOrderId=o.gateway_order_id||o.id;
-        let statusBody;
-        try{statusBody=await getTransactionStatus(gatewayOrderId);}catch(e){throw e?.safe?e:safeError('Status pembayaran belum dapat diperiksa. Coba lagi sebentar lagi.',502);}
-        const result=await applyMidtransStatus(statusBody,'midtrans-sync');
-        const fresh=(await q('SELECT * FROM orders WHERE id=$1',[orderId])).rows[0];
-        data={order:publicOrder(fresh),state:result.state};
-      }
+      const u=await requireAuth(req);const orderId=text(p.orderId,80);const {rows}=await q('SELECT * FROM orders WHERE id=$1 AND user_id=$2 LIMIT 1',[orderId,u.id]);const o=rows[0];
+      if(!o||o.payment_mode!=='xendit') throw safeError('Pesanan Xendit tidak ditemukan.');
+      if(o.status==='completed'){data={order:publicOrder(o),state:'success'};}
+      else{const statusBody=await getPaymentStatus(o.gateway_transaction_id);const result=await applyXenditStatus(statusBody,'xendit-sync');const fresh=(await q('SELECT * FROM orders WHERE id=$1',[orderId])).rows[0];await q(`UPDATE orders SET gateway_payload=$2::jsonb,gateway_status=$3,gateway_transaction_id=CASE WHEN $4<>'' THEN $4 ELSE gateway_transaction_id END,updated_at=NOW() WHERE id=$1`,[orderId,JSON.stringify(statusBody),String(statusBody.status||''),String(statusBody.transaction_id||'')]);data={order:publicOrder((await q('SELECT * FROM orders WHERE id=$1',[orderId])).rows[0]),state:result.state};}
     }
     else if(action==='uploadProof'){
       const u=await requireAuth(req); const orderId=text(p.orderId,80); const mime=text(p.mime,60); const name=text(p.fileName,160); const base64=String(p.base64||'');
@@ -206,16 +202,16 @@ export default async function handler(req,res){
         q('SELECT id,timestamp,actor,action,record_id,detail FROM audit ORDER BY timestamp DESC LIMIT 200'),getSettings()
       ]);
       const invMap={}; for(const r of inv.rows){invMap[r.product_id]??={available:0,delivered:0,disabled:0};invMap[r.product_id][r.status]=Number(r.count);}
-      data={orders:orders.rows.map(x=>publicOrder(x,true)),products:products.rows.map(p=>publicProduct(p,invMap[p.id]?.available||0)),banks:banks.rows,customers:customers.rows.map(c=>({...c,ordersCount:Number(c.orders_count),spent:Number(c.spent)})),inventory:invMap,inventoryItems:invItems.rows.map(i=>({id:i.id,productId:i.product_id,productName:i.product_name||i.product_id,itemValue:i.item_value,note:i.note||'',status:i.status,orderId:i.order_id||'',createdAt:i.created_at,updatedAt:i.updated_at})),audit:aud.rows,settings:{...s,storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,paymentMode:configuredPaymentMode()==='midtrans'?'midtrans':'manual',paymentReady:configuredPaymentMode()!=='midtrans'||midtransEnabled()},admin:{email:a.email}};
+      data={orders:orders.rows.map(x=>publicOrder(x,true)),products:products.rows.map(p=>publicProduct(p,invMap[p.id]?.available||0)),banks:banks.rows,customers:customers.rows.map(c=>({...c,ordersCount:Number(c.orders_count),spent:Number(c.spent)})),inventory:invMap,inventoryItems:invItems.rows.map(i=>({id:i.id,productId:i.product_id,productName:i.product_name||i.product_id,itemValue:i.item_value,note:i.note||'',status:i.status,orderId:i.order_id||'',createdAt:i.created_at,updatedAt:i.updated_at})),audit:aud.rows,settings:{...s,storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,paymentMode:configuredPaymentMode()==='xendit'?'xendit':'manual',paymentReady:configuredPaymentMode()!=='xendit'||xenditEnabled()},admin:{email:a.email}};
     }
     else if(action==='saveProduct'){
       const a=await requireAdmin(req); const x=p.product||{}; let pid=text(x.id,100); if(!pid) pid=id('prd');
-      const name=text(x.name,80),category=text(x.category,60)||'Digital',duration=text(x.duration,80),price=Number(x.price),stock=Number(x.stock); const isTopUp=category.toLowerCase().replace(/\s+/g,'')==='topup'; const mode=isTopUp?'manual':(x.fulfillmentMode==='inventory'?'inventory':'manual'); const requiresLogin=isTopUp||bool(x.requiresLoginCredentials); let thumbnail=text(x.thumbnail,500); if(thumbnail && !thumbnail.startsWith('/assets/') && !/^https:\/\//i.test(thumbnail)) throw safeError('Thumbnail harus berupa path /assets/... atau URL HTTPS.'); const featured=bool(x.featured);
+      const name=text(x.name,80),category=text(x.category,60)||'Digital',duration=text(x.duration,80),price=Number(x.price),stock=Number(x.stock); const isTopUp=category.toLowerCase().replace(/\s+/g,'')==='topup'; const mode=isTopUp?'manual':(x.fulfillmentMode==='inventory'?'inventory':'manual'); const requiresLogin=isTopUp||bool(x.requiresLoginCredentials); let thumbnail=text(x.thumbnail,500); if(thumbnail && !thumbnail.startsWith('/assets/') && !/^https:\/\//i.test(thumbnail)) throw safeError('Thumbnail harus berupa path /assets/... atau URL HTTPS.'); const featured=bool(x.featured); const upload=x.thumbnailUpload&&typeof x.thumbnailUpload==='object'?x.thumbnailUpload:null; let thumbnailMime='',thumbnailData=''; if(upload){thumbnailMime=text(upload.mime,80);thumbnailData=String(upload.base64||'');if(!['image/jpeg','image/png','image/webp'].includes(thumbnailMime)) throw safeError('Thumbnail upload harus JPG, PNG, atau WebP.');if(thumbnailData.length>1400000) throw safeError('Ukuran thumbnail maksimal sekitar 1 MB.');if(!/^[A-Za-z0-9+/=]+$/.test(thumbnailData)) throw safeError('Data thumbnail tidak valid.');}
       if(name.length<2||!Number.isInteger(price)||price<1000||!Number.isInteger(stock)||stock<-1) throw safeError('Data produk belum valid.');
       const benefits=Array.isArray(x.benefits)?x.benefits.map(v=>text(v,150)).filter(Boolean).slice(0,20):[];
-      await q(`INSERT INTO products(id,name,category,duration,price,description,benefits,terms,stock,active,badge,icon,fulfillment_mode,thumbnail_url,featured,requires_login_credentials,updated_at)
-        VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW())
-        ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,category=EXCLUDED.category,duration=EXCLUDED.duration,price=EXCLUDED.price,description=EXCLUDED.description,benefits=EXCLUDED.benefits,terms=EXCLUDED.terms,stock=EXCLUDED.stock,active=EXCLUDED.active,badge=EXCLUDED.badge,icon=EXCLUDED.icon,fulfillment_mode=EXCLUDED.fulfillment_mode,thumbnail_url=EXCLUDED.thumbnail_url,featured=EXCLUDED.featured,requires_login_credentials=EXCLUDED.requires_login_credentials,updated_at=NOW()`,[pid,name,category,duration,price,text(x.description,300),JSON.stringify(benefits),text(x.terms,2000),stock,bool(x.active),text(x.badge,40),text(x.icon,30)||'generic',mode,thumbnail,featured,requiresLogin]);
+      await q(`INSERT INTO products(id,name,category,duration,price,description,benefits,terms,stock,active,badge,icon,fulfillment_mode,thumbnail_url,thumbnail_mime,thumbnail_data,featured,requires_login_credentials,updated_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW())
+        ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,category=EXCLUDED.category,duration=EXCLUDED.duration,price=EXCLUDED.price,description=EXCLUDED.description,benefits=EXCLUDED.benefits,terms=EXCLUDED.terms,stock=EXCLUDED.stock,active=EXCLUDED.active,badge=EXCLUDED.badge,icon=EXCLUDED.icon,fulfillment_mode=EXCLUDED.fulfillment_mode,thumbnail_url=EXCLUDED.thumbnail_url,thumbnail_mime=CASE WHEN EXCLUDED.thumbnail_data<>'' THEN EXCLUDED.thumbnail_mime ELSE products.thumbnail_mime END,thumbnail_data=CASE WHEN EXCLUDED.thumbnail_data<>'' THEN EXCLUDED.thumbnail_data ELSE products.thumbnail_data END,featured=EXCLUDED.featured,requires_login_credentials=EXCLUDED.requires_login_credentials,updated_at=NOW()`,[pid,name,category,duration,price,text(x.description,300),JSON.stringify(benefits),text(x.terms,2000),stock,bool(x.active),text(x.badge,40),text(x.icon,30)||'generic',mode,thumbnail,thumbnailMime,thumbnailData,featured,requiresLogin]);
       await audit(a.email,'product_saved',pid,{name,mode,featured,requiresLogin}); data={id:pid};
     }
     else if(action==='adjustProductStock'){
@@ -233,8 +229,8 @@ export default async function handler(req,res){
         const current=Number(prod.stock); let next=current;
         if(operation==='set') next=amount;
         else {
-          if(current===-1) throw safeError('Stok produk saat ini Tanpa Batas. Pilih Set Stok untuk mengubahnya menjadi jumlah tertentu.');
-          next=operation==='add'?current+amount:current-amount;
+          if(current===-1){next=operation==='add'?amount:-1;if(operation==='subtract') throw safeError('Stok Tanpa Batas tidak dapat dikurangi. Pilih Set stok untuk mengubahnya menjadi jumlah tertentu.');}
+          else next=operation==='add'?current+amount:current-amount;
           if(next<0) throw safeError('Stok tidak boleh kurang dari 0.');
         }
         const r=await client.query('UPDATE products SET stock=$2,updated_at=NOW() WHERE id=$1 RETURNING id,name,stock',[productId,next]); updated=r.rows[0];
@@ -312,6 +308,6 @@ export default async function handler(req,res){
 
     return send(res,200,{ok:true,data},headers);
   }catch(e){
-    console.error('UPLY API',e); return send(res,e.status||500,{ok:false,error:e.safe?e.message:'Server sedang bermasalah. Periksa konfigurasi Vercel dan database.'},headers);
+    console.error('UPLY API',e); return send(res,e.status||500,{ok:false,error:e.safe?e.message:'Server sedang bermasalah. Periksa konfigurasi Netlify dan database.'},headers);
   }
 }
