@@ -1,46 +1,13 @@
-UPLY DIGITAL V27 — SIAP UPLOAD KE VERCEL
-==========================================
+UPLY DIGITAL V29 — MULAI DARI SINI
 
-V27 menambahkan PRODUCT VARIANT SYSTEM.
-Satu produk bisa mempunyai banyak paket/harga/stok, sehingga katalog tidak penuh produk duplikat.
-
-CARA UPDATE
 1. Backup database Neon production terlebih dahulu.
-2. Extract ZIP V27.
-3. Replace SELURUH isi repository Uply Digital lama dengan isi V27.
-4. Commit/push ke branch yang terhubung ke Vercel (biasanya main).
-5. Tunggu Production Deployment selesai.
-6. Environment Variables lama tetap digunakan; jangan ganti DATABASE_URL jika database sebelumnya sudah connected.
-7. Buka /api/health.
+2. Replace seluruh isi repository website dengan isi folder V29.
+3. Commit/push ke branch main dan tunggu Vercel selesai deploy.
+4. Environment Variables lama tetap digunakan. Tidak perlu membuat database baru.
+5. Buka /api/health. Pastikan version = 29.0, database = connected, checkoutSchemaReady = true, gallerySystemReady = true, growthSuiteReady = true.
+6. Login Admin → cek menu Garansi, Monitor Pembayaran, Laporan, dan Produk.
+7. Edit produk/varian untuk mengisi Harga Modal, Garansi (hari), dan Flash Sale jika diperlukan.
+8. Tes satu order baru sampai selesai, lalu cek Timeline Pesanan dan Warranty Center.
+9. Buka menu mobile → Metode Pembayaran. Sekarang harus menuju halaman #pembayaran, bukan Bantuan.
 
-TARGET HEALTH:
-- backend: connected
-- database: connected
-- hosting: vercel
-- version: 27.0
-- variantSystemReady: true
-
-CARA BUAT VARIAN
-Admin -> Produk -> pilih produk -> Varian -> + Tambah Varian.
-
-Setiap varian bisa punya:
-- nama
-- subtitle
-- harga
-- harga coret
-- stok
-- badge
-- urutan
-- aktif/nonaktif
-
-Stok 0 = Stok Habis dan customer tidak bisa memilih.
-Stok -1 = Tanpa batas (untuk produk manual).
-
-Produk lama tanpa varian tetap bekerja normal.
-Database lama tidak dihapus. V27 hanya menambah tabel/kolom dengan migration IF NOT EXISTS.
-
-Baca juga:
-- README.md
-- TUTORIAL-VARIAN-V27.md
-- CHANGELOG-V27.md
-- HASIL-PENGUJIAN.md
+Catatan: V29 memakai database Neon lama dan migration non-destruktif.
