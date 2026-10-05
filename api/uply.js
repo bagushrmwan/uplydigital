@@ -3,41 +3,49 @@ import { id, normalizeEmail, validEmail, hashPassword, verifyPassword, safeEqual
 import { createPayment, getPaymentStatus, expirePayment, midtransEnabled, paymentMode as configuredPaymentMode } from '../lib/midtrans.js';
 import { applyMidtransStatus, autoFulfillOrder } from '../lib/payment-state.js';
 import { sendEmail } from '../lib/email.js';
-import { syncMembership, notifyAdmin, refundOrderCredits, tierFromStats } from '../lib/business.js';
+import { syncMembership, notifyAdmin, notifyUser, refundOrderCredits, tierFromStats } from '../lib/business.js';
 
 function safeError(message,status=400){ const e=new Error(message); e.safe=true; e.status=status; return e; }
 function text(v,max=500){ return String(v??'').trim().slice(0,max); }
 function bool(v){ return v===true || String(v).toLowerCase()==='true'; }
+function saleInfo(row){
+  const regular=Math.max(0,Number(row?.price||0)); const sale=Math.max(0,Number(row?.sale_price||0));
+  const now=Date.now(), start=row?.sale_starts_at?new Date(row.sale_starts_at).getTime():0, end=row?.sale_ends_at?new Date(row.sale_ends_at).getTime():0;
+  const active=sale>0&&sale<regular&&(!start||start<=now)&&(!end||end>=now);
+  return {price:active?sale:regular,regularPrice:regular,salePrice:sale,saleActive:active,saleStartsAt:row?.sale_starts_at||null,saleEndsAt:row?.sale_ends_at||null,discountPercent:active&&regular?Math.round((regular-sale)/regular*100):0};
+}
+function warrantyDays(product,variant=null){const v=Number(variant?.warranty_days||0);return v>0?v:Math.max(0,Number(product?.warranty_days||0));}
 function phone(v,required=false){
   let p=text(v,24).replace(/[\s()+-]/g,''); if(p.startsWith('0')) p='62'+p.slice(1);
   if(!p&&!required) return ''; if(!/^[1-9]\d{8,14}$/.test(p)) throw safeError('Nomor WhatsApp tidak valid.'); return p;
 }
 function publicVariant(v,availableInventory=0,fulfillmentMode='manual'){
   const stock=fulfillmentMode==='inventory'?Number(availableInventory||0):Number(v.stock);
-  const compareAt=Number(v.compare_at_price||0);
-  const price=Number(v.price||0);
-  const discountPercent=compareAt>price&&compareAt>0?Math.round((compareAt-price)/compareAt*100):0;
-  return {id:v.id,productId:v.product_id,name:v.name,subtitle:v.subtitle||'',price,compareAtPrice:compareAt,stock,active:!!v.active,badge:v.badge||'',sortOrder:Number(v.sort_order||0),discountPercent};
+  const compareAt=Number(v.compare_at_price||0); const sale=saleInfo(v); const compareBase=Math.max(compareAt,sale.regularPrice);
+  const discountPercent=compareBase>sale.price&&compareBase>0?Math.round((compareBase-sale.price)/compareBase*100):0;
+  return {id:v.id,productId:v.product_id,name:v.name,subtitle:v.subtitle||'',price:sale.price,regularPrice:sale.regularPrice,compareAtPrice:compareBase,stock,active:!!v.active,badge:v.badge||'',sortOrder:Number(v.sort_order||0),discountPercent,warrantyDays:Number(v.warranty_days||0),saleActive:sale.saleActive,salePrice:sale.salePrice,saleStartsAt:sale.saleStartsAt,saleEndsAt:sale.saleEndsAt};
 }
-function publicProduct(r,availableInventory,variants=[]){
+function publicMedia(m){
+  const uploaded=!!m.image_data;
+  const src=uploaded?`/api/product-media-image?id=${encodeURIComponent(m.id)}&v=${encodeURIComponent(new Date(m.updated_at||Date.now()).getTime())}`:(m.image_url||'');
+  return {id:m.id,productId:m.product_id,kind:m.kind||'info',title:m.title||'',caption:m.caption||'',src,hasUploadedImage:uploaded,sortOrder:Number(m.sort_order||0),active:!!m.active};
+}
+function publicProduct(r,availableInventory,variants=[],gallery=[]){
   const uploaded=!!r.thumbnail_data;
   const thumbnail=uploaded?`/api/product-image?id=${encodeURIComponent(r.id)}&v=${encodeURIComponent(new Date(r.updated_at||Date.now()).getTime())}`:(r.thumbnail_url||'');
   const activeVariants=(variants||[]).filter(v=>v.active!==false);
   const variantPrices=activeVariants.map(v=>Number(v.price)).filter(Number.isFinite);
   const hasVariants=activeVariants.length>0;
-  let price=Number(r.price),stock=r.fulfillment_mode==='inventory'?Number(availableInventory):Number(r.stock);
-  if(hasVariants){
-    price=Math.min(...variantPrices);
-    const stocks=activeVariants.map(v=>Number(v.stock));
-    stock=stocks.includes(-1)?-1:stocks.reduce((a,b)=>a+Math.max(0,b),0);
-  }
-  return {id:r.id,name:r.name,category:r.category,duration:r.duration,price,priceMin:hasVariants?Math.min(...variantPrices):price,priceMax:hasVariants?Math.max(...variantPrices):price,hasVariants,variants:activeVariants,description:r.description,benefits:Array.isArray(r.benefits)?r.benefits:[],terms:r.terms,stock,active:r.active,badge:r.badge,icon:r.icon,fulfillmentMode:r.fulfillment_mode,thumbnail,hasUploadedThumbnail:uploaded,featured:!!r.featured,requiresLoginCredentials:!!r.requires_login_credentials,soldCount:Number(r.sold_count||0),bestSeller:!!r.best_seller,lowStockThreshold:Number(r.low_stock_threshold||3)};
+  const sale=saleInfo(r); let price=sale.price,stock=r.fulfillment_mode==='inventory'?Number(availableInventory):Number(r.stock);
+  if(hasVariants){price=Math.min(...variantPrices);const stocks=activeVariants.map(v=>Number(v.stock));stock=stocks.includes(-1)?-1:stocks.reduce((a,b)=>a+Math.max(0,b),0);}
+  const warranty=Number(r.warranty_days||0);
+  return {id:r.id,name:r.name,category:r.category,duration:r.duration,price,regularPrice:sale.regularPrice,priceMin:hasVariants?Math.min(...variantPrices):price,priceMax:hasVariants?Math.max(...variantPrices):price,hasVariants,variants:activeVariants,description:r.description,benefits:Array.isArray(r.benefits)?r.benefits:[],terms:r.terms,stock,active:r.active,badge:r.badge,icon:r.icon,fulfillmentMode:r.fulfillment_mode,thumbnail,hasUploadedThumbnail:uploaded,gallery:(gallery||[]).filter(x=>x.active!==false),featured:!!r.featured,requiresLoginCredentials:!!r.requires_login_credentials,soldCount:Number(r.sold_count||0),bestSeller:!!r.best_seller,lowStockThreshold:Number(r.low_stock_threshold||3),warrantyDays:warranty,saleActive:!hasVariants&&sale.saleActive,salePrice:sale.salePrice,saleStartsAt:sale.saleStartsAt,saleEndsAt:sale.saleEndsAt,saleDiscountPercent:sale.discountPercent};
 }
 function publicOrder(o,admin=false){
   const gp=o.gateway_payload&&typeof o.gateway_payload==='object'?o.gateway_payload:{};
   const va=Array.isArray(gp.va_numbers)&&gp.va_numbers[0]?gp.va_numbers[0]:{};
   const paymentData={method:o.gateway_payment_method||gp.payment_type||'',channel:o.gateway_payment_channel||gp.bank||va.bank||'',transactionId:o.gateway_transaction_id||gp.transaction_id||'',snapToken:gp.token||'',qrUrl:'',qrContent:'',vaNumber:gp.permata_va_number||va.va_number||'',paymentCode:gp.payment_code||'',billKey:gp.bill_key||'',billerCode:gp.biller_code||'',paymentUrl:o.payment_url||gp.redirect_url||gp.finish_redirect_url||'',expiredAt:null,fee:0,feeBearer:'',amount:Number(gp.gross_amount||o.total||0)};
-  return {id:o.id,userId:admin?o.user_id:undefined,email:o.email,name:o.name,phone:o.phone,channel:o.channel,productId:o.product_id,productName:o.product_name,productThumbnail:o.product_thumbnail||'',variantId:o.variant_id||'',variantName:o.variant_name||'',variantSubtitle:o.variant_subtitle||'',duration:o.duration,quantity:Number(o.quantity),price:Number(o.price),subtotal:Number(o.subtotal||Number(o.price)*Number(o.quantity)),discount:Number(o.discount||0),voucherCode:o.voucher_code||'',balanceUsed:Number(o.balance_used||0),total:Number(o.total),status:o.status,paymentMode:o.payment_mode,gatewayStatus:o.gateway_status,paymentUrl:o.payment_url, paymentData,createdAt:o.created_at,expiresAt:o.expires_at,updatedAt:o.updated_at,paymentSubmittedAt:o.payment_submitted_at,paymentVerifiedAt:o.payment_verified_at,processingAt:o.processing_at,completedAt:o.completed_at,hasProof:!!o.proof_name,proofName:o.proof_name,delivery:o.delivery,note:o.note,hasCredentials:admin?!!o.credentials_enc:undefined,credentialsStatus:admin?(o.credentials_status||''):undefined,credentialsViewedAt:admin?o.credentials_viewed_at:undefined,bank:o.bank_id?{id:o.bank_id,name:o.bank_name,number:o.bank_number,holder:o.bank_holder}:null};
+  return {id:o.id,userId:admin?o.user_id:undefined,email:o.email,name:o.name,phone:o.phone,channel:o.channel,productId:o.product_id,productName:o.product_name,productThumbnail:o.product_thumbnail||'',variantId:o.variant_id||'',variantName:o.variant_name||'',variantSubtitle:o.variant_subtitle||'',duration:o.duration,quantity:Number(o.quantity),price:Number(o.price),subtotal:Number(o.subtotal||Number(o.price)*Number(o.quantity)),discount:Number(o.discount||0),voucherCode:o.voucher_code||'',balanceUsed:Number(o.balance_used||0),total:Number(o.total),costPrice:Number(o.cost_price||0),warrantyDays:Number(o.warranty_days||0),warrantyUntil:o.warranty_until||null,saleApplied:!!o.sale_applied,status:o.status,paymentMode:o.payment_mode,gatewayStatus:o.gateway_status,paymentUrl:o.payment_url, paymentData,createdAt:o.created_at,expiresAt:o.expires_at,updatedAt:o.updated_at,paymentSubmittedAt:o.payment_submitted_at,paymentVerifiedAt:o.payment_verified_at,processingAt:o.processing_at,completedAt:o.completed_at,hasProof:!!o.proof_name,proofName:o.proof_name,delivery:o.delivery,note:o.note,hasCredentials:admin?!!o.credentials_enc:undefined,credentialsStatus:admin?(o.credentials_status||''):undefined,credentialsViewedAt:admin?o.credentials_viewed_at:undefined,bank:o.bank_id?{id:o.bank_id,name:o.bank_name,number:o.bank_number,holder:o.bank_holder}:null};
 }
 function originHeaders(req){
   const origin=String(req.headers.origin||''); const allowed=process.env.ALLOWED_ORIGIN||process.env.SITE_URL||'';
@@ -68,9 +76,10 @@ async function expireOldOrders(){
   }catch(e){await client.query('ROLLBACK');throw e;}finally{await client.release();}
 }
 async function catalog(){
-  const [pr,vr,ir,br,s,sales]=await Promise.all([
+  const [pr,vr,mr,ir,br,s,sales]=await Promise.all([
     q(`SELECT p.*,COALESCE(sc.sold_count,0)::int AS sold_count FROM products p LEFT JOIN (SELECT product_id,COUNT(*)::int AS sold_count FROM orders WHERE status='completed' GROUP BY product_id) sc ON sc.product_id=p.id WHERE p.active=TRUE ORDER BY p.featured DESC,p.created_at,p.id`),
     q(`SELECT * FROM product_variants WHERE active=TRUE ORDER BY product_id,sort_order,created_at,id`),
+    q(`SELECT * FROM product_media WHERE active=TRUE ORDER BY product_id,sort_order,created_at,id`),
     q(`SELECT product_id,variant_id,COUNT(*)::int AS available FROM inventory WHERE status='available' GROUP BY product_id,variant_id`),
     q('SELECT id,name,number,holder,active FROM banks WHERE active=TRUE ORDER BY created_at,id'),
     getSettings(),
@@ -80,8 +89,10 @@ async function catalog(){
   for(const x of ir.rows){const n=Number(x.available);invProduct[x.product_id]=(invProduct[x.product_id]||0)+n;if(x.variant_id)invVariant[x.variant_id]=n;}
   const variantsByProduct={};
   for(const v of vr.rows){const pv=publicVariant(v,invVariant[v.id]||0,(pr.rows.find(p=>p.id===v.product_id)||{}).fulfillment_mode||'manual');(variantsByProduct[v.product_id]??=[]).push(pv);}
+  const mediaByProduct={};
+  for(const m of mr.rows){(mediaByProduct[m.product_id]??=[]).push(publicMedia(m));}
   const best=new Set(sales.rows.filter(x=>Number(x.n)>0).map(x=>x.product_id));
-  const products=pr.rows.map(p=>publicProduct({...p,best_seller:best.has(p.id)},invProduct[p.id]||0,variantsByProduct[p.id]||[]));
+  const products=pr.rows.map(p=>publicProduct({...p,best_seller:best.has(p.id)},invProduct[p.id]||0,variantsByProduct[p.id]||[],mediaByProduct[p.id]||[]));
   const methods=availablePaymentMethods(s,br.rows);
   const cfg=configuredPaymentMode();
   return {products,banks:br.rows,paymentMethods:methods,settings:{storeName:s.storeName||'Uply Digital',whatsapp:s.whatsapp||'',hours:s.hours||'',storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,notice:s.notice||'',promoBanner:s.promoBanner||'',paymentMode:cfg,paymentReady:methods.some(m=>m.id!=='balance'),paymentProvider:methods.map(m=>m.label).join(' · '),manualPaymentEnabled:bool(s.manualPaymentEnabled),midtransPaymentEnabled:bool(s.midtransPaymentEnabled),balancePaymentEnabled:bool(s.balancePaymentEnabled),qrisManualReady:!!s.qrisImageData,qrisName:s.qrisName||'QRIS Manual'}};
@@ -222,13 +233,38 @@ export default async function handler(req,res){
       const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
       const {rows}=await q('SELECT * FROM orders WHERE user_id=$1 ORDER BY created_at DESC LIMIT 200',[u.id]); data=rows.map(x=>publicOrder(x));
     }
+    else if(action==='claims'){
+      const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
+      const {rows}=await q(`SELECT c.*,o.product_name,o.variant_name,o.duration,o.warranty_until,o.completed_at FROM warranty_claims c JOIN orders o ON o.id=c.order_id WHERE c.user_id=$1 ORDER BY c.created_at DESC LIMIT 200`,[u.id]);
+      data=rows.map(c=>({id:c.id,orderId:c.order_id,productId:c.product_id,variantId:c.variant_id||'',productName:c.product_name,variantName:c.variant_name||c.duration||'',category:c.category,description:c.description,status:c.status,adminNote:c.admin_note||'',hasScreenshot:!!c.screenshot_name,createdAt:c.created_at,updatedAt:c.updated_at,resolvedAt:c.resolved_at,warrantyUntil:c.warranty_until,completedAt:c.completed_at}));
+    }
+    else if(action==='customerNotifications'){
+      const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
+      const {rows}=await q('SELECT * FROM customer_notifications WHERE user_id=$1 ORDER BY is_read,created_at DESC LIMIT 100',[u.id]); data=rows;
+    }
+    else if(action==='markCustomerNotificationsRead'){
+      const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
+      if(p.id) await q('UPDATE customer_notifications SET is_read=TRUE WHERE id=$1 AND user_id=$2',[Number(p.id),u.id]); else await q('UPDATE customer_notifications SET is_read=TRUE WHERE user_id=$1 AND is_read=FALSE',[u.id]); data=true;
+    }
+    else if(action==='createWarrantyClaim'){
+      const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
+      const orderId=text(p.orderId,80), category=text(p.category,50)||'kendala_produk', description=text(p.description,1800); if(description.length<10) throw safeError('Jelaskan kendala minimal 10 karakter.');
+      const {rows}=await q('SELECT * FROM orders WHERE id=$1 AND user_id=$2 LIMIT 1',[orderId,u.id]); const o=rows[0];
+      if(!o||o.status!=='completed') throw safeError('Klaim hanya dapat dibuat untuk pesanan yang sudah selesai.');
+      if(!o.warranty_until || new Date(o.warranty_until).getTime()<Date.now()) throw safeError('Masa garansi pesanan ini sudah berakhir atau produk tidak memiliki garansi aktif.');
+      const active=(await q(`SELECT COUNT(*)::int AS n FROM warranty_claims WHERE order_id=$1 AND status NOT IN ('rejected','resolved')`,[orderId])).rows[0]?.n||0; if(Number(active)>0) throw safeError('Masih ada klaim aktif untuk pesanan ini.');
+      let screenshotName='',screenshotMime='',screenshotData=''; const file=p.file&&typeof p.file==='object'?p.file:null;
+      if(file){screenshotName=text(file.name,160);screenshotMime=text(file.mime,80);screenshotData=String(file.base64||'');if(!['image/jpeg','image/png','image/webp'].includes(screenshotMime))throw safeError('Screenshot harus JPG, PNG, atau WebP.');if(screenshotData.length>1800000)throw safeError('Screenshot maksimal sekitar 1,3 MB.');}
+      const claimId=id('clm'); await q(`INSERT INTO warranty_claims(id,order_id,user_id,product_id,variant_id,category,description,screenshot_name,screenshot_mime,screenshot_data) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[claimId,o.id,u.id,o.product_id,o.variant_id||'',category,description,screenshotName,screenshotMime,screenshotData]);
+      await audit(u.email,'warranty_claim_created',claimId,{orderId:o.id,product:o.product_name}); await notifyAdmin('warranty','Klaim garansi baru',`${o.product_name} · ${u.email}`,claimId); await notifyUser(u.id,'warranty','Klaim garansi diterima',`Klaim ${claimId} sudah masuk dan menunggu pemeriksaan admin.`,claimId); data={id:claimId};
+    }
     else if(action==='checkoutPreflight'){
       const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
       const settings=await getSettings(); if(!bool(settings.storeOpen)) throw safeError('Toko sedang menutup pesanan baru.');
       const qty=Number(p.quantity); if(!Number.isInteger(qty)||qty<1||qty>5) throw safeError('Jumlah produk harus 1–5.');
       const {rows}=await q('SELECT * FROM products WHERE id=$1 AND active=TRUE LIMIT 1',[text(p.productId,100)]); const prod=rows[0]; if(!prod) throw safeError('Produk tidak tersedia.');
       const variant=await resolveVariant({db:{query:(t,pa)=>q(t,pa)},product:prod,variantId:p.variantId,qty});
-      const pricedProduct=variant?{...prod,price:Number(variant.price)}:prod;
+      const sourcePrice=saleInfo(variant||prod); const pricedProduct={...prod,price:Number(sourcePrice.price)};
       const requiresLogin=bool(prod.requires_login_credentials)||String(prod.category).toLowerCase().replace(/\s+/g,'')==='topup';
       if(requiresLogin){if(!credentialSecurityReady()) throw safeError('CREDENTIAL_ENCRYPTION_KEY belum diatur untuk produk Top Up.',500);if(!validEmail(normalizeEmail(p.accountEmail))) throw safeError('Email login akun Top Up tidak valid.');const pw=String(p.accountPassword||'');if(pw.length<4||pw.length>200) throw safeError('Password login akun Top Up belum valid.');}
       const {rows:activeBanks}=await q('SELECT * FROM banks WHERE active=TRUE ORDER BY created_at,id');
@@ -257,7 +293,7 @@ export default async function handler(req,res){
           await client.query('BEGIN');
           const {rows:prs}=await client.query('SELECT * FROM products WHERE id=$1 AND active=TRUE LIMIT 1 FOR UPDATE',[text(p.productId,100)]); prod=prs[0]; if(!prod) throw safeError('Produk tidak tersedia.');
           variant=await resolveVariant({db:client,product:prod,variantId:p.variantId,qty,lock:true});
-          pricedProduct=variant?{...prod,price:Number(variant.price)}:prod;
+          const sourcePrice=saleInfo(variant||prod); pricedProduct={...prod,price:Number(sourcePrice.price)};
 
           const name=text(p.name||u.name,80); if(name.length<2) throw safeError('Nama penerima wajib diisi.');
           const channel=p.channel==='whatsapp'?'whatsapp':'email'; const ph=phone(p.phone,channel==='whatsapp');
@@ -314,8 +350,9 @@ export default async function handler(req,res){
           const selectedPayMethod=mode==='midtrans'?'snap':mode; const selectedPayChannel=mode==='midtrans'?'MIDTRANS':mode==='qris_manual'?'QRIS_MANUAL':'';
           const publicThumb=prod.thumbnail_data?`/api/product-image?id=${encodeURIComponent(prod.id)}&v=${encodeURIComponent(new Date(prod.updated_at||Date.now()).getTime())}`:(prod.thumbnail_url||'');
           const initialStatus=mode==='balance'?'processing':'pending_payment'; const verified=mode==='balance';
-          const {rows:ors}=await client.query(`INSERT INTO orders(id,user_id,email,name,phone,channel,product_id,product_name,product_thumbnail,variant_id,variant_name,variant_subtitle,duration,quantity,price,subtotal,discount,voucher_code,balance_used,total,bank_id,bank_name,bank_number,bank_holder,note,status,payment_mode,expires_at,request_id,stock_reserved,credentials_enc,credentials_status,gateway_payment_method,gateway_payment_channel,payment_submitted_at,payment_verified_at,processing_at)
-            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,NOW()+($28 || ' hours')::interval,$29,$30,$31,$32,$33,$34,$35,$36,$37) RETURNING *`,[orderId,u.id,u.email,name,ph,channel,prod.id,prod.name,publicThumb,variant?.id||'',variant?.name||'',variant?.subtitle||'',variant?.name||prod.duration,qty,Number(pricedProduct.price),subtotal,voucher.discount,voucher.code,balanceUsed,due,bank.id||'',bank.name||'',bank.number||'',bank.holder||'',customerNote,initialStatus,mode,String(hours),requestId,finiteManualStock&&!verified,credentialsEnc,credentialsEnc?'encrypted':'',selectedPayMethod,selectedPayChannel,verified?new Date():null,verified?new Date():null,verified?new Date():null]);
+          const costSnapshot=Math.max(0,Number((variant||prod).cost_price||0)); const warrantySnapshot=warrantyDays(prod,variant); const saleApplied=!!sourcePrice.saleActive;
+          const {rows:ors}=await client.query(`INSERT INTO orders(id,user_id,email,name,phone,channel,product_id,product_name,product_thumbnail,variant_id,variant_name,variant_subtitle,duration,quantity,price,subtotal,discount,voucher_code,balance_used,total,cost_price,warranty_days,sale_applied,bank_id,bank_name,bank_number,bank_holder,note,status,payment_mode,expires_at,request_id,stock_reserved,credentials_enc,credentials_status,gateway_payment_method,gateway_payment_channel,payment_submitted_at,payment_verified_at,processing_at)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,NOW()+($31 || ' hours')::interval,$32,$33,$34,$35,$36,$37,$38,$39,$40) RETURNING *`,[orderId,u.id,u.email,name,ph,channel,prod.id,prod.name,publicThumb,variant?.id||'',variant?.name||'',variant?.subtitle||'',variant?.name||prod.duration,qty,Number(pricedProduct.price),subtotal,voucher.discount,voucher.code,balanceUsed,due,costSnapshot,warrantySnapshot,saleApplied,bank.id||'',bank.name||'',bank.number||'',bank.holder||'',customerNote,initialStatus,mode,String(hours),requestId,finiteManualStock&&!verified,credentialsEnc,credentialsEnc?'encrypted':'',selectedPayMethod,selectedPayChannel,verified?new Date():null,verified?new Date():null,verified?new Date():null]);
           order=ors[0]; await client.query('COMMIT');
         }catch(e){await client.query('ROLLBACK');throw e;}finally{await client.release();}
 
@@ -368,10 +405,11 @@ export default async function handler(req,res){
     }
     else if(action==='adminData'){
       const a=await requireAdmin(req);
-      const [orders,products,variants,banks,customers,inv,invItems,aud,s,vouchers,ledger,notifications,daily,topProducts,paymentMix]=await Promise.all([
+      const [orders,products,variants,media,banks,customers,inv,invItems,aud,s,vouchers,ledger,notifications,daily,topProducts,paymentMix,claims,paymentAttempts,paymentEvents]=await Promise.all([
         q('SELECT * FROM orders ORDER BY created_at DESC LIMIT 1000'),
         q('SELECT * FROM products ORDER BY created_at,id'),
         q('SELECT * FROM product_variants ORDER BY product_id,sort_order,created_at,id'),
+        q('SELECT * FROM product_media ORDER BY product_id,sort_order,created_at,id'),
         q('SELECT * FROM banks ORDER BY created_at,id'),
         q(`SELECT u.id,u.email,u.name,u.phone,u.balance,u.membership_tier,u.membership_manual,u.created_at,COUNT(o.id)::int AS orders_count,COUNT(o.id) FILTER (WHERE o.status='completed')::int AS completed_count,COALESCE(SUM(CASE WHEN o.status='completed' THEN COALESCE(NULLIF(o.subtotal,0),o.price*o.quantity)-o.discount ELSE 0 END),0)::bigint AS spent FROM users u LEFT JOIN orders o ON o.user_id=u.id GROUP BY u.id ORDER BY u.created_at DESC LIMIT 1000`),
         q(`SELECT product_id,variant_id,status,COUNT(*)::int AS count FROM inventory GROUP BY product_id,variant_id,status`),
@@ -383,14 +421,18 @@ export default async function handler(req,res){
         q(`SELECT * FROM admin_notifications ORDER BY is_read,created_at DESC LIMIT 100`),
         q(`SELECT to_char((created_at AT TIME ZONE 'Asia/Jakarta')::date,'YYYY-MM-DD') AS day,COUNT(*)::int AS orders,COALESCE(SUM(CASE WHEN status IN ('processing','completed') THEN COALESCE(NULLIF(subtotal,0),price*quantity)-discount ELSE 0 END),0)::bigint AS revenue FROM orders WHERE created_at>=NOW()-INTERVAL '30 days' GROUP BY 1 ORDER BY 1`),
         q(`SELECT product_id,MAX(product_name) AS name,COUNT(*) FILTER (WHERE status='completed')::int AS completed,COALESCE(SUM(CASE WHEN status='completed' THEN quantity ELSE 0 END),0)::int AS units,COALESCE(SUM(CASE WHEN status='completed' THEN COALESCE(NULLIF(subtotal,0),price*quantity)-discount ELSE 0 END),0)::bigint AS revenue FROM orders GROUP BY product_id ORDER BY revenue DESC LIMIT 10`),
-        q(`SELECT payment_mode,COUNT(*)::int AS orders,COALESCE(SUM(CASE WHEN status IN ('processing','completed') THEN total+balance_used ELSE 0 END),0)::bigint AS revenue FROM orders GROUP BY payment_mode ORDER BY orders DESC`)
+        q(`SELECT payment_mode,COUNT(*)::int AS orders,COALESCE(SUM(CASE WHEN status IN ('processing','completed') THEN total+balance_used ELSE 0 END),0)::bigint AS revenue FROM orders GROUP BY payment_mode ORDER BY orders DESC`),
+        q(`SELECT c.*,u.name AS customer_name,u.email AS customer_email,o.product_name,o.variant_name,o.duration,o.warranty_until FROM warranty_claims c LEFT JOIN users u ON u.id=c.user_id LEFT JOIN orders o ON o.id=c.order_id ORDER BY c.created_at DESC LIMIT 500`),
+        q(`SELECT pa.*,o.product_name,o.name AS customer_name,o.total AS order_total,o.status AS order_status FROM payment_attempts pa LEFT JOIN orders o ON o.id=pa.order_id ORDER BY pa.created_at DESC LIMIT 500`),
+        q(`SELECT * FROM payment_events ORDER BY created_at DESC LIMIT 300`)
       ]);
       const invMap={},invVariant={}; for(const r of inv.rows){invMap[r.product_id]??={available:0,delivered:0,disabled:0};invMap[r.product_id][r.status]=(invMap[r.product_id][r.status]||0)+Number(r.count);if(r.variant_id){invVariant[r.variant_id]??={available:0,delivered:0,disabled:0};invVariant[r.variant_id][r.status]=Number(r.count);}}
-      const variantsByProduct={}; for(const v of variants.rows){const prod=products.rows.find(p=>p.id===v.product_id);const pv=publicVariant(v,invVariant[v.id]?.available||0,prod?.fulfillment_mode||'manual');(variantsByProduct[v.product_id]??=[]).push(pv);}
+      const variantsByProduct={}; for(const v of variants.rows){const prod=products.rows.find(p=>p.id===v.product_id);const pv={...publicVariant(v,invVariant[v.id]?.available||0,prod?.fulfillment_mode||'manual'),costPrice:Number(v.cost_price||0),warrantyDays:Number(v.warranty_days||0),salePrice:Number(v.sale_price||0),saleStartsAt:v.sale_starts_at||null,saleEndsAt:v.sale_ends_at||null};(variantsByProduct[v.product_id]??=[]).push(pv);}
+      const mediaByProduct={}; for(const m of media.rows){(mediaByProduct[m.product_id]??=[]).push(publicMedia(m));}
       const methods=availablePaymentMethods(s,banks.rows.filter(b=>b.active));
       data={
         orders:orders.rows.map(x=>publicOrder(x,true)),
-        products:products.rows.map(p=>({...publicProduct(p,invMap[p.id]?.available||0,variantsByProduct[p.id]||[]),allVariants:variantsByProduct[p.id]||[]})),
+        products:products.rows.map(p=>({...publicProduct(p,invMap[p.id]?.available||0,variantsByProduct[p.id]||[],mediaByProduct[p.id]||[]),costPrice:Number(p.cost_price||0),warrantyDays:Number(p.warranty_days||0),salePrice:Number(p.sale_price||0),saleStartsAt:p.sale_starts_at||null,saleEndsAt:p.sale_ends_at||null,allVariants:variantsByProduct[p.id]||[],allGallery:mediaByProduct[p.id]||[]})),
         banks:banks.rows,
         customers:customers.rows.map(c=>({...c,balance:Number(c.balance||0),membershipTier:(c.membership_manual||!bool(s.autoRoleEnabled))?(c.membership_tier||'customer'):tierFromStats(c.completed_count,c.spent),membershipManual:!!c.membership_manual,ordersCount:Number(c.orders_count),completedCount:Number(c.completed_count),spent:Number(c.spent)})),
         inventory:invMap,
@@ -398,7 +440,10 @@ export default async function handler(req,res){
         vouchers:vouchers.rows.map(v=>({...v,discountValue:Number(v.discount_value),minSpend:Number(v.min_spend),maxDiscount:Number(v.max_discount),usageLimit:Number(v.usage_limit),perUserLimit:Number(v.per_user_limit),used:Number(v.used),productIds:Array.isArray(v.product_ids)?v.product_ids:[]})),
         balanceLedger:ledger.rows.map(l=>({...l,amount:Number(l.amount)})),
         notifications:notifications.rows,
-        analytics:{daily:daily.rows.map(r=>({...r,orders:Number(r.orders),revenue:Number(r.revenue)})),topProducts:topProducts.rows.map(r=>({...r,completed:Number(r.completed),units:Number(r.units),revenue:Number(r.revenue)})),paymentMix:paymentMix.rows.map(r=>({...r,orders:Number(r.orders),revenue:Number(r.revenue)}))},
+        claims:claims.rows.map(c=>({id:c.id,orderId:c.order_id,userId:c.user_id,productId:c.product_id,variantId:c.variant_id||'',customerName:c.customer_name||'',customerEmail:c.customer_email||'',productName:c.product_name||'',variantName:c.variant_name||c.duration||'',category:c.category,description:c.description,status:c.status,adminNote:c.admin_note||'',hasScreenshot:!!c.screenshot_name,warrantyUntil:c.warranty_until,createdAt:c.created_at,updatedAt:c.updated_at,resolvedAt:c.resolved_at})),
+        paymentAttempts:paymentAttempts.rows.map(x=>({gatewayOrderId:x.gateway_order_id,orderId:x.order_id,provider:x.provider,attemptNo:Number(x.attempt_no),status:x.status,transactionId:x.transaction_id,paymentUrl:x.payment_url,createdAt:x.created_at,updatedAt:x.updated_at,productName:x.product_name||'',customerName:x.customer_name||'',orderTotal:Number(x.order_total||0),orderStatus:x.order_status||''})),
+        paymentEvents:paymentEvents.rows.map(x=>({id:x.id,eventKey:x.event_key,orderId:x.order_id,error:x.error||'',processedAt:x.processed_at,createdAt:x.created_at})),
+        analytics:{daily:daily.rows.map(r=>({...r,orders:Number(r.orders),revenue:Number(r.revenue)})),topProducts:topProducts.rows.map(r=>({...r,completed:Number(r.completed),units:Number(r.units),revenue:Number(r.revenue)})),paymentMix:paymentMix.rows.map(r=>({...r,orders:Number(r.orders),revenue:Number(r.revenue)})),profit:orders.rows.filter(o=>o.status==='completed').reduce((n,o)=>n+(Number(o.subtotal||Number(o.price)*Number(o.quantity))-Number(o.discount||0)-Number(o.cost_price||0)*Number(o.quantity)),0)},
         audit:aud.rows,
         settings:{...s,qrisImageData:undefined,qrisImageMime:undefined,storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,paymentMode:configuredPaymentMode(),paymentReady:methods.some(m=>m.id!=='balance'),paymentMethods:methods,manualPaymentEnabled:bool(s.manualPaymentEnabled),midtransPaymentEnabled:bool(s.midtransPaymentEnabled),balancePaymentEnabled:bool(s.balancePaymentEnabled),autoRoleEnabled:bool(s.autoRoleEnabled),qrisManualReady:!!s.qrisImageData,qrisName:s.qrisName||'QRIS Manual'},
         admin:{email:a.email}
@@ -406,25 +451,77 @@ export default async function handler(req,res){
     }
     else if(action==='saveProduct'){
       const a=await requireAdmin(req); const x=p.product||{}; let pid=text(x.id,100); if(!pid) pid=id('prd');
-      const name=text(x.name,80),category=text(x.category,60)||'Digital',duration=text(x.duration,80),price=Number(x.price),stock=Number(x.stock),lowStockThreshold=Math.max(0,Math.min(999,Number(x.lowStockThreshold)||3)); const isTopUp=category.toLowerCase().replace(/\s+/g,'')==='topup'; const mode=isTopUp?'manual':(x.fulfillmentMode==='inventory'?'inventory':'manual'); const requiresLogin=isTopUp||bool(x.requiresLoginCredentials); let thumbnail=text(x.thumbnail,500); if(thumbnail && !thumbnail.startsWith('/assets/') && !/^https:\/\//i.test(thumbnail)) throw safeError('Thumbnail harus berupa path /assets/... atau URL HTTPS.'); const featured=bool(x.featured); const upload=x.thumbnailUpload&&typeof x.thumbnailUpload==='object'?x.thumbnailUpload:null; let thumbnailMime='',thumbnailData=''; if(upload){thumbnailMime=text(upload.mime,80);thumbnailData=String(upload.base64||'');if(!['image/jpeg','image/png','image/webp'].includes(thumbnailMime)) throw safeError('Thumbnail upload harus JPG, PNG, atau WebP.');if(thumbnailData.length>1400000) throw safeError('Ukuran thumbnail maksimal sekitar 1 MB.');if(!/^[A-Za-z0-9+/=]+$/.test(thumbnailData)) throw safeError('Data thumbnail tidak valid.');}
+      const name=text(x.name,80),category=text(x.category,60)||'Digital',duration=text(x.duration,80),price=Number(x.price),stock=Number(x.stock),lowStockThreshold=Math.max(0,Math.min(999,Number(x.lowStockThreshold)||3)),costPrice=Math.max(0,Math.round(Number(x.costPrice)||0)),warrantyDaysValue=Math.max(0,Math.min(3650,Math.round(Number(x.warrantyDays)||0))),salePrice=Math.max(0,Math.round(Number(x.salePrice)||0)); const saleStarts=x.saleStartsAt?new Date(x.saleStartsAt):null,saleEnds=x.saleEndsAt?new Date(x.saleEndsAt):null; if(saleStarts&&Number.isNaN(saleStarts.getTime())) throw safeError('Tanggal mulai flash sale tidak valid.'); if(saleEnds&&Number.isNaN(saleEnds.getTime())) throw safeError('Tanggal akhir flash sale tidak valid.'); if(saleStarts&&saleEnds&&saleEnds<=saleStarts) throw safeError('Tanggal akhir flash sale harus setelah tanggal mulai.'); if(salePrice>0&&salePrice>=price) throw safeError('Harga flash sale harus lebih kecil dari harga normal.'); const isTopUp=category.toLowerCase().replace(/\s+/g,'')==='topup'; const mode=isTopUp?'manual':(x.fulfillmentMode==='inventory'?'inventory':'manual'); const requiresLogin=isTopUp||bool(x.requiresLoginCredentials); let thumbnail=text(x.thumbnail,500); if(thumbnail && !thumbnail.startsWith('/assets/') && !/^https:\/\//i.test(thumbnail)) throw safeError('Thumbnail harus berupa path /assets/... atau URL HTTPS.'); const featured=bool(x.featured); const upload=x.thumbnailUpload&&typeof x.thumbnailUpload==='object'?x.thumbnailUpload:null; let thumbnailMime='',thumbnailData=''; if(upload){thumbnailMime=text(upload.mime,80);thumbnailData=String(upload.base64||'');if(!['image/jpeg','image/png','image/webp'].includes(thumbnailMime)) throw safeError('Thumbnail upload harus JPG, PNG, atau WebP.');if(thumbnailData.length>1400000) throw safeError('Ukuran thumbnail maksimal sekitar 1 MB.');if(!/^[A-Za-z0-9+/=]+$/.test(thumbnailData)) throw safeError('Data thumbnail tidak valid.');}
       if(name.length<2||!Number.isInteger(price)||price<1000||!Number.isInteger(stock)||stock<-1) throw safeError('Data produk belum valid.');
       const benefits=Array.isArray(x.benefits)?x.benefits.map(v=>text(v,150)).filter(Boolean).slice(0,20):[];
-      await q(`INSERT INTO products(id,name,category,duration,price,description,benefits,terms,stock,active,badge,icon,fulfillment_mode,thumbnail_url,thumbnail_mime,thumbnail_data,featured,requires_login_credentials,low_stock_threshold,updated_at)
-        VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NOW())
-        ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,category=EXCLUDED.category,duration=EXCLUDED.duration,price=EXCLUDED.price,description=EXCLUDED.description,benefits=EXCLUDED.benefits,terms=EXCLUDED.terms,stock=EXCLUDED.stock,active=EXCLUDED.active,badge=EXCLUDED.badge,icon=EXCLUDED.icon,fulfillment_mode=EXCLUDED.fulfillment_mode,thumbnail_url=EXCLUDED.thumbnail_url,thumbnail_mime=CASE WHEN EXCLUDED.thumbnail_data<>'' THEN EXCLUDED.thumbnail_mime ELSE products.thumbnail_mime END,thumbnail_data=CASE WHEN EXCLUDED.thumbnail_data<>'' THEN EXCLUDED.thumbnail_data ELSE products.thumbnail_data END,featured=EXCLUDED.featured,requires_login_credentials=EXCLUDED.requires_login_credentials,low_stock_threshold=EXCLUDED.low_stock_threshold,updated_at=NOW()`,[pid,name,category,duration,price,text(x.description,300),JSON.stringify(benefits),text(x.terms,2000),stock,bool(x.active),text(x.badge,40),text(x.icon,30)||'generic',mode,thumbnail,thumbnailMime,thumbnailData,featured,requiresLogin,lowStockThreshold]);
+      await q(`INSERT INTO products(id,name,category,duration,price,description,benefits,terms,stock,active,badge,icon,fulfillment_mode,thumbnail_url,thumbnail_mime,thumbnail_data,featured,requires_login_credentials,low_stock_threshold,cost_price,warranty_days,sale_price,sale_starts_at,sale_ends_at,updated_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,NOW())
+        ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,category=EXCLUDED.category,duration=EXCLUDED.duration,price=EXCLUDED.price,description=EXCLUDED.description,benefits=EXCLUDED.benefits,terms=EXCLUDED.terms,stock=EXCLUDED.stock,active=EXCLUDED.active,badge=EXCLUDED.badge,icon=EXCLUDED.icon,fulfillment_mode=EXCLUDED.fulfillment_mode,thumbnail_url=EXCLUDED.thumbnail_url,thumbnail_mime=CASE WHEN EXCLUDED.thumbnail_data<>'' THEN EXCLUDED.thumbnail_mime ELSE products.thumbnail_mime END,thumbnail_data=CASE WHEN EXCLUDED.thumbnail_data<>'' THEN EXCLUDED.thumbnail_data ELSE products.thumbnail_data END,featured=EXCLUDED.featured,requires_login_credentials=EXCLUDED.requires_login_credentials,low_stock_threshold=EXCLUDED.low_stock_threshold,cost_price=EXCLUDED.cost_price,warranty_days=EXCLUDED.warranty_days,sale_price=EXCLUDED.sale_price,sale_starts_at=EXCLUDED.sale_starts_at,sale_ends_at=EXCLUDED.sale_ends_at,updated_at=NOW()`,[pid,name,category,duration,price,text(x.description,300),JSON.stringify(benefits),text(x.terms,2000),stock,bool(x.active),text(x.badge,40),text(x.icon,30)||'generic',mode,thumbnail,thumbnailMime,thumbnailData,featured,requiresLogin,lowStockThreshold,costPrice,warrantyDaysValue,salePrice,saleStarts?saleStarts.toISOString():null,saleEnds?saleEnds.toISOString():null]);
       if(!upload && (bool(x.clearUploadedThumbnail) || !!thumbnail)) await q(`UPDATE products SET thumbnail_mime='',thumbnail_data='',updated_at=NOW() WHERE id=$1`,[pid]);
       await audit(a.email,'product_saved',pid,{name,mode,featured,requiresLogin,thumbnailUpload:!!upload}); data={id:pid};
+    }
+    else if(action==='deleteProduct'){
+      const admin=await requireAdmin(req); const productId=text(p.productId,100);
+      const product=(await q('SELECT id,name,active FROM products WHERE id=$1 LIMIT 1',[productId])).rows[0]; if(!product) throw safeError('Produk tidak ditemukan.');
+      const [ordersCount,inventoryCount,variantsCount]=await Promise.all([
+        q('SELECT COUNT(*)::int AS n FROM orders WHERE product_id=$1',[productId]),
+        q('SELECT COUNT(*)::int AS n FROM inventory WHERE product_id=$1',[productId]),
+        q('SELECT COUNT(*)::int AS n FROM product_variants WHERE product_id=$1',[productId])
+      ]);
+      const orders=Number(ordersCount.rows[0]?.n||0), inventory=Number(inventoryCount.rows[0]?.n||0), variants=Number(variantsCount.rows[0]?.n||0);
+      if(orders>0 || inventory>0){
+        await q('UPDATE products SET active=FALSE,featured=FALSE,updated_at=NOW() WHERE id=$1',[productId]);
+        await audit(admin.email,'product_archived',productId,{name:product.name,orders,inventory,variants});
+        data={mode:'archived',id:productId,name:product.name,orders,inventory,variants};
+      }else{
+        const client=await pool.connect();
+        try{
+          await client.query('BEGIN');
+          await client.query('DELETE FROM product_variants WHERE product_id=$1',[productId]);
+          await client.query('DELETE FROM product_media WHERE product_id=$1',[productId]);
+          await client.query('DELETE FROM products WHERE id=$1',[productId]);
+          await client.query('COMMIT');
+        }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
+        await audit(admin.email,'product_deleted',productId,{name:product.name,variants});
+        data={mode:'deleted',id:productId,name:product.name,orders:0,inventory:0,variants};
+      }
+    }
+    else if(action==='restoreProduct'){
+      const admin=await requireAdmin(req); const productId=text(p.productId,100);
+      const r=await q('UPDATE products SET active=TRUE,updated_at=NOW() WHERE id=$1 RETURNING id,name',[productId]); if(!r.rowCount) throw safeError('Produk tidak ditemukan.');
+      await audit(admin.email,'product_restored',productId,{name:r.rows[0].name}); data={id:r.rows[0].id,name:r.rows[0].name};
+    }
+    else if(action==='saveProductMedia'){
+      const a=await requireAdmin(req); const x=p.media||{}; const productId=text(x.productId,100); let mediaId=text(x.id,100)||id('med');
+      const product=(await q('SELECT id,name FROM products WHERE id=$1 LIMIT 1',[productId])).rows[0]; if(!product) throw safeError('Produk tidak ditemukan.');
+      if(!x.id){const count=Number((await q('SELECT COUNT(*)::int AS n FROM product_media WHERE product_id=$1',[productId])).rows[0]?.n||0);if(count>=12)throw safeError('Maksimal 12 gambar galeri per produk.');}
+      const allowedKinds=new Set(['benefit','warranty','claim','activation','tutorial','info','other']); const kind=allowedKinds.has(text(x.kind,30))?text(x.kind,30):'info';
+      const title=text(x.title,80),caption=text(x.caption,240),sortOrder=Math.max(-999,Math.min(999,Number(x.sortOrder)||0));
+      let imageUrl=text(x.imageUrl,500); if(imageUrl && !imageUrl.startsWith('/assets/') && !/^https:\/\//i.test(imageUrl)) throw safeError('URL gambar harus berupa path /assets/... atau URL HTTPS.');
+      const upload=x.imageUpload&&typeof x.imageUpload==='object'?x.imageUpload:null; let imageMime='',imageData='';
+      if(upload){imageMime=text(upload.mime,80);imageData=String(upload.base64||'');if(!['image/jpeg','image/png','image/webp'].includes(imageMime))throw safeError('Gambar galeri harus JPG, PNG, atau WebP.');if(imageData.length>1800000)throw safeError('Ukuran gambar galeri maksimal sekitar 1,3 MB.');if(!/^[A-Za-z0-9+/=]+$/.test(imageData))throw safeError('Data gambar galeri tidak valid.');}
+      if(!upload&&!imageUrl&&!(x.id&&bool(x.keepExistingImage))) throw safeError('Pilih gambar upload atau isi URL gambar.');
+      await q(`INSERT INTO product_media(id,product_id,kind,title,caption,image_url,image_mime,image_data,sort_order,active,updated_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+        ON CONFLICT(id) DO UPDATE SET product_id=EXCLUDED.product_id,kind=EXCLUDED.kind,title=EXCLUDED.title,caption=EXCLUDED.caption,image_url=CASE WHEN EXCLUDED.image_url<>'' THEN EXCLUDED.image_url ELSE product_media.image_url END,image_mime=CASE WHEN EXCLUDED.image_data<>'' THEN EXCLUDED.image_mime ELSE product_media.image_mime END,image_data=CASE WHEN EXCLUDED.image_data<>'' THEN EXCLUDED.image_data ELSE product_media.image_data END,sort_order=EXCLUDED.sort_order,active=EXCLUDED.active,updated_at=NOW()`,
+        [mediaId,productId,kind,title,caption,imageUrl,imageMime,imageData,sortOrder,bool(x.active)]);
+      if(bool(x.clearUploadedImage)&&!upload) await q(`UPDATE product_media SET image_mime='',image_data='',image_url=$2,updated_at=NOW() WHERE id=$1`,[mediaId,imageUrl]);
+      await audit(a.email,'product_media_saved',mediaId,{productId,kind,title,uploaded:!!upload}); data={id:mediaId};
+    }
+    else if(action==='deleteProductMedia'){
+      const a=await requireAdmin(req); const mediaId=text(p.mediaId,100); const row=(await q('DELETE FROM product_media WHERE id=$1 RETURNING id,product_id,title',[mediaId])).rows[0]; if(!row) throw safeError('Gambar galeri tidak ditemukan.');
+      await audit(a.email,'product_media_deleted',mediaId,{productId:row.product_id,title:row.title}); data=true;
     }
     else if(action==='saveProductVariant'){
       const a=await requireAdmin(req); const x=p.variant||{}; const productId=text(x.productId,100); let variantId=text(x.id,100)||id('var');
       const product=(await q('SELECT id,name,fulfillment_mode FROM products WHERE id=$1 LIMIT 1',[productId])).rows[0]; if(!product) throw safeError('Produk tidak ditemukan.');
-      const name=text(x.name,80),subtitle=text(x.subtitle,140),price=Number(x.price),compareAtPrice=Math.max(0,Number(x.compareAtPrice)||0),stock=Number(x.stock),sortOrder=Math.max(-999,Math.min(999,Number(x.sortOrder)||0)),badge=text(x.badge,40);
+      const name=text(x.name,80),subtitle=text(x.subtitle,140),price=Number(x.price),compareAtPrice=Math.max(0,Number(x.compareAtPrice)||0),stock=Number(x.stock),sortOrder=Math.max(-999,Math.min(999,Number(x.sortOrder)||0)),badge=text(x.badge,40),costPrice=Math.max(0,Math.round(Number(x.costPrice)||0)),warrantyDaysValue=Math.max(0,Math.min(3650,Math.round(Number(x.warrantyDays)||0))),salePrice=Math.max(0,Math.round(Number(x.salePrice)||0)); const saleStarts=x.saleStartsAt?new Date(x.saleStartsAt):null,saleEnds=x.saleEndsAt?new Date(x.saleEndsAt):null; if(saleStarts&&Number.isNaN(saleStarts.getTime())) throw safeError('Tanggal mulai flash sale varian tidak valid.'); if(saleEnds&&Number.isNaN(saleEnds.getTime())) throw safeError('Tanggal akhir flash sale varian tidak valid.'); if(saleStarts&&saleEnds&&saleEnds<=saleStarts) throw safeError('Tanggal akhir flash sale varian harus setelah tanggal mulai.'); if(salePrice>0&&salePrice>=price) throw safeError('Harga flash sale varian harus lebih kecil dari harga normal.');
       if(name.length<1||!Number.isInteger(price)||price<1000||!Number.isInteger(stock)||stock<-1) throw safeError('Data varian belum valid.');
       if(compareAtPrice>0&&compareAtPrice<price) throw safeError('Harga coret harus lebih besar atau sama dengan harga jual.');
-      await q(`INSERT INTO product_variants(id,product_id,name,subtitle,price,compare_at_price,stock,active,badge,sort_order,updated_at)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
-        ON CONFLICT(id) DO UPDATE SET product_id=EXCLUDED.product_id,name=EXCLUDED.name,subtitle=EXCLUDED.subtitle,price=EXCLUDED.price,compare_at_price=EXCLUDED.compare_at_price,stock=EXCLUDED.stock,active=EXCLUDED.active,badge=EXCLUDED.badge,sort_order=EXCLUDED.sort_order,updated_at=NOW()`,
-        [variantId,productId,name,subtitle,price,compareAtPrice,stock,bool(x.active),badge,sortOrder]);
+      await q(`INSERT INTO product_variants(id,product_id,name,subtitle,price,compare_at_price,stock,active,badge,sort_order,cost_price,warranty_days,sale_price,sale_starts_at,sale_ends_at,updated_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW())
+        ON CONFLICT(id) DO UPDATE SET product_id=EXCLUDED.product_id,name=EXCLUDED.name,subtitle=EXCLUDED.subtitle,price=EXCLUDED.price,compare_at_price=EXCLUDED.compare_at_price,stock=EXCLUDED.stock,active=EXCLUDED.active,badge=EXCLUDED.badge,sort_order=EXCLUDED.sort_order,cost_price=EXCLUDED.cost_price,warranty_days=EXCLUDED.warranty_days,sale_price=EXCLUDED.sale_price,sale_starts_at=EXCLUDED.sale_starts_at,sale_ends_at=EXCLUDED.sale_ends_at,updated_at=NOW()`,
+        [variantId,productId,name,subtitle,price,compareAtPrice,stock,bool(x.active),badge,sortOrder,costPrice,warrantyDaysValue,salePrice,saleStarts?saleStarts.toISOString():null,saleEnds?saleEnds.toISOString():null]);
       await audit(a.email,'product_variant_saved',variantId,{productId,name,price,stock}); data={id:variantId};
     }
     else if(action==='deleteProductVariant'){
@@ -535,19 +632,36 @@ export default async function handler(req,res){
         payment_verified_at=CASE WHEN $2 IN ('processing','completed') AND payment_verified_at IS NULL THEN NOW() ELSE payment_verified_at END,
         processing_at=CASE WHEN $2='processing' AND processing_at IS NULL THEN NOW() WHEN $2='completed' AND processing_at IS NULL THEN NOW() ELSE processing_at END,
         completed_at=CASE WHEN $2='completed' AND completed_at IS NULL THEN NOW() ELSE completed_at END,
+        warranty_until=CASE WHEN $2='completed' AND warranty_days>0 THEN COALESCE(completed_at,NOW()) + (warranty_days || ' days')::interval ELSE warranty_until END,
         credentials_enc=CASE WHEN $2 IN ('completed','cancelled') THEN '' ELSE credentials_enc END,
         credentials_status=CASE WHEN $2 IN ('completed','cancelled') AND credentials_status<>'' THEN 'purged' ELSE credentials_status END,
         stock_reserved=CASE WHEN $2 IN ('processing','completed','cancelled') THEN FALSE ELSE stock_reserved END,updated_at=NOW() WHERE id=$1`,[orderId,status,delivery,note]); await audit(a.email,'order_status_updated',orderId,{from:old.status,to:status});
       if(status==='processing') await autoFulfillOrder(orderId,'admin');
       if(status==='cancelled') await refundOrderCredits(orderId,a.email,'Pesanan dibatalkan admin.');
-      if(status==='completed'){await syncMembership(old.user_id,a.email);await notifyAdmin('success','Pesanan selesai',`${old.product_name} · ${old.name}`,orderId);await sendEmail(old.email,`Pesanan ${orderId} selesai`,`<h2>Pesanan selesai</h2><p>${escapeHtml(old.product_name)}</p><pre style="white-space:pre-wrap">${escapeHtml(delivery)}</pre>`);}
+      if(status==='processing') await notifyUser(old.user_id,'order','Pesanan sedang diproses',`${old.product_name} sedang diproses admin.`,orderId);
+      if(status==='cancelled') await notifyUser(old.user_id,'order','Pesanan dibatalkan',`${old.product_name} dibatalkan.`,orderId);
+      if(status==='completed'){await syncMembership(old.user_id,a.email);await notifyAdmin('success','Pesanan selesai',`${old.product_name} · ${old.name}`,orderId);await notifyUser(old.user_id,'success','Pesanan selesai',`${old.product_name} sudah selesai.${Number(old.warranty_days||0)>0?` Garansi aktif ${Number(old.warranty_days)} hari.`:''}`,orderId);await sendEmail(old.email,`Pesanan ${orderId} selesai`,`<h2>Pesanan selesai</h2><p>${escapeHtml(old.product_name)}</p><pre style="white-space:pre-wrap">${escapeHtml(delivery)}</pre>`);} 
       data=publicOrder((await q('SELECT * FROM orders WHERE id=$1',[orderId])).rows[0],true);
     }
 
+    else if(action==='updateWarrantyClaim'){
+      const a=await requireAdmin(req); const claimId=text(p.claimId,100), status=text(p.status,30), adminNote=text(p.adminNote,1200);
+      if(!['submitted','review','processing','approved','rejected','resolved'].includes(status)) throw safeError('Status klaim tidak valid.');
+      const {rows}=await q(`SELECT c.*,u.email,o.product_name FROM warranty_claims c LEFT JOIN users u ON u.id=c.user_id LEFT JOIN orders o ON o.id=c.order_id WHERE c.id=$1 LIMIT 1`,[claimId]); const c=rows[0]; if(!c) throw safeError('Klaim tidak ditemukan.');
+      await q(`UPDATE warranty_claims SET status=$2,admin_note=$3,resolved_at=CASE WHEN $2 IN ('rejected','resolved') THEN COALESCE(resolved_at,NOW()) ELSE NULL END,updated_at=NOW() WHERE id=$1`,[claimId,status,adminNote]);
+      await audit(a.email,'warranty_claim_updated',claimId,{from:c.status,to:status}); await notifyUser(c.user_id,'warranty','Status klaim diperbarui',`Klaim ${claimId} untuk ${c.product_name||'produk'}: ${status}.`,claimId); if(c.email) await sendEmail(c.email,`Update klaim ${claimId}`,`<h2>Status klaim garansi</h2><p>${escapeHtml(c.product_name||'Produk')}</p><p>Status: <strong>${escapeHtml(status)}</strong></p><p>${escapeHtml(adminNote)}</p>`); data=true;
+    }
+    else if(action==='getWarrantyScreenshot'){
+      const a=await requireAdmin(req); const claimId=text(p.claimId,100); const {rows}=await q('SELECT screenshot_name,screenshot_mime,screenshot_data FROM warranty_claims WHERE id=$1 LIMIT 1',[claimId]); const c=rows[0]; if(!c||!c.screenshot_data) throw safeError('Screenshot klaim tidak tersedia.'); await audit(a.email,'warranty_screenshot_viewed',claimId,{}); data={name:c.screenshot_name,mime:c.screenshot_mime,base64:c.screenshot_data};
+    }
+    else if(action==='adminSyncPayment'){
+      const a=await requireAdmin(req); const orderId=text(p.orderId,80); const {rows}=await q('SELECT * FROM orders WHERE id=$1 LIMIT 1',[orderId]); const o=rows[0]; if(!o) throw safeError('Pesanan tidak ditemukan.'); if(o.payment_mode!=='midtrans'||!o.gateway_order_id) throw safeError('Order ini tidak memiliki transaksi Midtrans aktif.');
+      const statusBody=await getPaymentStatus(o.gateway_order_id); const result=await applyMidtransStatus(statusBody,'admin-midtrans-sync'); await audit(a.email,'admin_payment_synced',orderId,{gatewayOrderId:o.gateway_order_id,state:result.state}); data={state:result.state,order:publicOrder((await q('SELECT * FROM orders WHERE id=$1',[orderId])).rows[0],true)};
+    }
     else if(action==='validateVoucher'){
       const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
       const {rows}=await q('SELECT * FROM products WHERE id=$1 AND active=TRUE LIMIT 1',[text(p.productId,100)]); const prod=rows[0]; if(!prod) throw safeError('Produk tidak ditemukan.');
-      const qty=Math.max(1,Math.min(5,Number(p.quantity)||1)); const variant=await resolveVariant({db:{query:(t,pa)=>q(t,pa)},product:prod,variantId:p.variantId,qty}); const priced=variant?{...prod,price:Number(variant.price)}:prod; const quote=await voucherQuote({code:p.code,userId:u.id,product:priced,qty});
+      const qty=Math.max(1,Math.min(5,Number(p.quantity)||1)); const variant=await resolveVariant({db:{query:(t,pa)=>q(t,pa)},product:prod,variantId:p.variantId,qty}); const priced={...prod,price:saleInfo(variant||prod).price}; const quote=await voucherQuote({code:p.code,userId:u.id,product:priced,qty});
       data={...quote,variantId:variant?.id||'',subtotal:Number(priced.price)*qty,total:Math.max(0,Number(priced.price)*qty-quote.discount)};
     }
     else if(action==='saveVoucher'){

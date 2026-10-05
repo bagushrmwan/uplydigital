@@ -23,7 +23,11 @@ export default async function handler(req,res){
     };
     const schema=await q(`SELECT COUNT(*)::int AS n FROM information_schema.columns WHERE table_schema='public' AND ((table_name='users' AND column_name='balance') OR (table_name='orders' AND column_name IN ('subtotal','discount','voucher_code','balance_used','variant_id','variant_name')) OR (table_name='products' AND column_name='low_stock_threshold') OR (table_name='inventory' AND column_name='variant_id'))`);
     const variants=await q(`SELECT COUNT(*)::int AS n FROM information_schema.tables WHERE table_schema='public' AND table_name='product_variants'`);
+    const media=await q(`SELECT COUNT(*)::int AS n FROM information_schema.tables WHERE table_schema='public' AND table_name='product_media'`);
     const checkoutSchemaReady=Number(schema.rows[0]?.n||0)>=9&&Number(variants.rows[0]?.n||0)===1;
-    return res.status(200).json({ok:payment.ready&&checkoutSchemaReady,backend:'connected',database:'connected',hosting:'vercel',version:'27.0',checkoutSchemaReady,variantSystemReady:Number(variants.rows[0]?.n||0)===1,payment});
+    const gallerySystemReady=Number(media.rows[0]?.n||0)===1;
+    const growth=await q(`SELECT COUNT(*)::int AS n FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('warranty_claims','customer_notifications')`);
+    const growthSuiteReady=Number(growth.rows[0]?.n||0)===2;
+    return res.status(200).json({ok:payment.ready&&checkoutSchemaReady&&gallerySystemReady&&growthSuiteReady,backend:'connected',database:'connected',hosting:'vercel',version:'29.0',checkoutSchemaReady,variantSystemReady:Number(variants.rows[0]?.n||0)===1,gallerySystemReady,growthSuiteReady,payment});
   }catch(e){return res.status(500).json({ok:false,error:String(e.message||e)})}
 }
