@@ -28,6 +28,6 @@ export default async function handler(req,res){
     const gallerySystemReady=Number(media.rows[0]?.n||0)===1;
     const growth=await q(`SELECT COUNT(*)::int AS n FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('warranty_claims','customer_notifications')`);
     const growthSuiteReady=Number(growth.rows[0]?.n||0)===2;
-    return res.status(200).json({ok:payment.ready&&checkoutSchemaReady&&gallerySystemReady&&growthSuiteReady,backend:'connected',database:'connected',hosting:'vercel',version:'31.9',checkoutSchemaReady,variantSystemReady:Number(variants.rows[0]?.n||0)===1,gallerySystemReady,growthSuiteReady,email:emailHealth(),payment});
+    return res.status(200).json({ok:payment.ready&&checkoutSchemaReady&&gallerySystemReady&&growthSuiteReady,backend:'connected',database:'connected',hosting:'vercel',version:'32.0',checkoutSchemaReady,variantSystemReady:Number(variants.rows[0]?.n||0)===1,gallerySystemReady,growthSuiteReady,email:emailHealth(),payment});
   }catch(e){return res.status(500).json({ok:false,error:String(e.message||e)})}
 }

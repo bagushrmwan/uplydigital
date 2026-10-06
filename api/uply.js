@@ -306,6 +306,13 @@ export default async function handler(req,res){
       }
       data={ready:true,productId:prod.id,variantId:variant?.id||'',quantity:qty,paymentMethod:due===0?'balance':requested};
     }
+    else if(action==='checkoutRequestStatus'){
+      const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
+      const requestId=text(p.requestId,80); if(!/^[a-zA-Z0-9._-]{12,80}$/.test(requestId)) throw safeError('Request checkout tidak valid.');
+      const {rows}=await q('SELECT * FROM orders WHERE request_id=$1 AND user_id=$2 LIMIT 1',[requestId,u.id]);
+      const found=rows[0]||null;
+      data=found?{found:true,order:publicOrder(found),paymentUrl:found.payment_url||'',paymentData:found.gateway_payload||null}:{found:false,order:null,paymentUrl:'',paymentData:null};
+    }
     else if(action==='createOrder'){
       const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
       const settings=await getSettings(); if(!bool(settings.storeOpen)) throw safeError('Toko sedang menutup pesanan baru.');
