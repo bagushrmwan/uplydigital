@@ -293,3 +293,80 @@ html[data-theme="dark"] .v18-search{background:#101b2c;border-color:#22314a}html
 @media(max-width:440px){
   .v18-hero h1{font-size:36px}.v18-hero-art{height:285px}.v18-float-card{width:129px}.v18-float-card strong{font-size:9px}.v18-float-card small{display:none}.v18-lead-product{left:42px;right:18px}.v18-secure-card{display:none}.v18-category-grid{grid-template-columns:1fr 1fr}.v18-category-card strong{font-size:10px}.v18-products-actions{display:grid;grid-template-columns:1fr auto}.v18-search{grid-column:1/-1}.v18-product-media{height:105px!important;min-height:105px!important}.v18-badge{font-size:7px;padding:4px 6px}.v18-duration{font-size:7px}.v18-detail-info h1{font-size:27px}.v18-feature-cards{grid-template-columns:1fr}.v18-buy-box{grid-template-columns:1fr 1fr}.v18-buy-box>.qty-control{grid-column:1/-1;justify-self:start}.v18-buy-box>.btn{width:100%}.v18-trust-grid{grid-template-columns:1fr 1fr}.v18-trust article>span small{display:none}
 }
+
+
+/* =====================================================
+   V31.6 — BeliBayar QRIS embed + Virtual Account
+   ===================================================== */
+.belibayar-checkout-panel{
+  margin-top:14px;padding:16px;border:1px solid var(--line);border-radius:18px;
+  background:color-mix(in srgb,var(--surface,#fff) 94%,#eaf3ff 6%);
+}
+.belibayar-choice-head{display:grid;gap:3px;margin-bottom:12px}
+.belibayar-choice-head strong{font-size:14px;color:var(--text)}
+.belibayar-choice-head small,.bb-bank-label{color:var(--muted);font-size:12px}
+.belibayar-method-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.belibayar-method-card{position:relative;display:block}
+.belibayar-method-card>input{position:absolute;opacity:0;pointer-events:none}
+.belibayar-method-card>span{
+  display:grid;gap:4px;min-height:76px;padding:13px 14px;border:1.5px solid var(--line);
+  border-radius:15px;background:var(--card,#fff);cursor:pointer;transition:.18s ease
+}
+.belibayar-method-card>span b{color:var(--text);font-size:13px}
+.belibayar-method-card>span small{color:var(--muted);line-height:1.35}
+.belibayar-method-card>input:checked+span{border-color:#2d6df6;background:color-mix(in srgb,#2d6df6 8%,var(--card,#fff));box-shadow:0 0 0 3px rgba(45,109,246,.08)}
+.belibayar-method-panel{padding-top:4px}
+.bb-checkout-note{display:flex;align-items:center;gap:10px;padding:12px;border-radius:14px;background:color-mix(in srgb,#2d6df6 7%,var(--card,#fff));border:1px solid color-mix(in srgb,#2d6df6 18%,var(--line))}
+.bb-checkout-note>span{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:#2d6df6;color:#fff;font-weight:900}
+.bb-checkout-note>div{display:grid;gap:2px}.bb-checkout-note strong{color:var(--text)}.bb-checkout-note small{color:var(--muted)}
+.bb-bank-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:9px}
+.bb-bank-option{position:relative;display:block}.bb-bank-option>input{position:absolute;opacity:0;pointer-events:none}
+.bb-bank-option>span{min-height:68px;display:flex;align-items:center;gap:9px;padding:10px;border:1.5px solid var(--line);border-radius:13px;background:var(--card,#fff);cursor:pointer}
+.bb-bank-option img{width:34px;height:34px;object-fit:contain;border-radius:8px;background:#fff;padding:3px}
+.bb-bank-option span>b{width:34px;height:34px;display:grid;place-items:center;border-radius:8px;background:#edf4ff;color:#1b55c8;font-size:9px}
+.bb-bank-option em{font-style:normal;font-size:11px;font-weight:800;color:var(--text)}
+.bb-bank-option>input:checked+span{border-color:#2d6df6;background:color-mix(in srgb,#2d6df6 8%,var(--card,#fff));box-shadow:0 0 0 3px rgba(45,109,246,.08)}
+
+.bb-payment-card{margin:16px 0;padding:18px;border:1px solid var(--line);border-radius:20px;background:var(--card,#fff);box-shadow:0 10px 30px rgba(20,58,120,.06)}
+.bb-payment-heading{display:grid;gap:5px;text-align:center;justify-items:center}
+.bb-payment-heading>strong{font-size:20px;color:var(--text)}
+.bb-payment-heading>small{color:var(--muted);max-width:420px}
+.bb-provider-chip{display:inline-flex;padding:6px 10px;border-radius:999px;background:color-mix(in srgb,#2d6df6 10%,var(--card,#fff));color:#2d6df6;font-size:11px;font-weight:850}
+.bb-qr-frame{width:min(310px,100%);aspect-ratio:1;margin:16px auto;padding:13px;border-radius:20px;background:#fff;border:1px solid #dfe7f3;box-shadow:0 12px 30px rgba(13,45,100,.08)}
+.bb-qr-frame img{width:100%;height:100%;object-fit:contain;display:block}
+.bb-payment-total,.bb-payment-expiry{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-top:1px solid var(--line)}
+.bb-payment-total span,.bb-payment-expiry span{color:var(--muted)}
+.bb-payment-total strong{font-size:22px;color:var(--text)}
+.bb-payment-expiry b{color:#2d6df6}.bb-payment-expiry b.expired{color:#d24949}
+.bb-payment-actions{justify-content:center;margin-top:8px}
+.bb-bank-logo{width:58px;height:38px;object-fit:contain;background:#fff;border:1px solid #e1e8f2;border-radius:10px;padding:5px}
+.bb-va-number{display:grid;grid-template-columns:1fr auto;align-items:center;gap:7px 12px;margin:16px 0;padding:16px;border-radius:16px;background:color-mix(in srgb,#2d6df6 7%,var(--card,#fff));border:1px dashed color-mix(in srgb,#2d6df6 35%,var(--line))}
+.bb-va-number>span{grid-column:1/-1;color:var(--muted);font-size:12px}
+.bb-va-number>strong{font-size:22px;letter-spacing:.045em;word-break:break-all;color:var(--text)}
+.automatic-payment-panel>.tiny{color:var(--muted)}
+
+html[data-theme="dark"] .belibayar-checkout-panel,
+html[data-theme="dark"] .belibayar-method-card>span,
+html[data-theme="dark"] .bb-bank-option>span,
+html[data-theme="dark"] .bb-payment-card{background:#101b2c;border-color:#263750}
+html[data-theme="dark"] .bb-checkout-note,
+html[data-theme="dark"] .bb-va-number{background:#12233d;border-color:#29476e}
+html[data-theme="dark"] .belibayar-method-card>input:checked+span,
+html[data-theme="dark"] .bb-bank-option>input:checked+span{background:#13294b;border-color:#4b88ff}
+html[data-theme="dark"] .bb-provider-chip{background:#132b4f;color:#86b3ff}
+html[data-theme="dark"] .bb-payment-heading>strong,
+html[data-theme="dark"] .bb-payment-total strong,
+html[data-theme="dark"] .bb-va-number>strong,
+html[data-theme="dark"] .bb-bank-option em,
+html[data-theme="dark"] .belibayar-method-card>span b,
+html[data-theme="dark"] .belibayar-choice-head strong{color:#eef5ff}
+
+@media(max-width:720px){
+  .belibayar-method-tabs{grid-template-columns:1fr}
+  .bb-bank-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .bb-qr-frame{width:min(285px,100%)}
+  .bb-payment-card{padding:15px}
+  .bb-payment-actions{display:grid;grid-template-columns:1fr}
+  .bb-va-number{grid-template-columns:1fr}
+  .bb-va-number>span{grid-column:auto}.bb-va-number>.btn{width:100%}
+}

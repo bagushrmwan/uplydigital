@@ -1,0 +1,30 @@
+UPLY DIGITAL V31.6 — QRIS EMBED + VIRTUAL ACCOUNT
+
+UPDATE WINDOWS DULU:
+1. Extract Uply-BeliBayar-Windows-Backend-V31.6-READY.zip.
+2. Replace C:\uply-backend\server.js.
+3. Jangan timpa C:\uply-backend\.env.
+4. Jalankan:
+   cd C:\uply-backend
+   npm install
+   Stop-Process -Name node -Force
+   node .\server.js
+
+Cek:
+https://uplyapi.duckdns.org/health
+Harus version 31.6.
+
+UPDATE VERCEL:
+1. Deploy ZIP Uply-Digital-V31.6-Vercel-READY.zip.
+2. Redeploy Production.
+3. Environment Variables lama tetap digunakan.
+
+Cek:
+https://uplydigital-ten.vercel.app/api/health
+Harus version 31.6.
+Bagian belibayar.activeChannels akan menunjukkan channel aktif merchant.
+
+HASIL:
+- QRIS tampil langsung di halaman pesanan.
+- Virtual Account hanya menampilkan bank yang aktif pada BeliBayar.
+- Status pembayaran tetap otomatis melalui webhook.

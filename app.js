@@ -4,11 +4,39 @@ const modal = $('#modal');
 const modalBody = $('#modalBody');
 const toast = $('#toast');
 let paymentPollTimer = null;
+let paymentCountdownTimer = null;
 
 const money = n => new Intl.NumberFormat('id-ID', { style:'currency', currency:'IDR', maximumFractionDigits:0 }).format(Number(n)||0);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dt = v => new Intl.DateTimeFormat('id-ID', { dateStyle:'medium', timeStyle:'short', timeZone:'Asia/Jakarta' }).format(new Date(v));
 const truncate = (v, n=44) => String(v ?? '').length > n ? String(v).slice(0,n-1) + '…' : String(v ?? '');
+
+function paymentExpiryMs(v){
+  if(v===null||v===undefined||v==='') return 0;
+  const n=Number(v);
+  if(Number.isFinite(n)&&n>0) return n>1e12?n:n*1000;
+  const d=Date.parse(String(v));
+  return Number.isFinite(d)?d:0;
+}
+function setupPaymentCountdowns(){
+  if(paymentCountdownTimer){clearInterval(paymentCountdownTimer);paymentCountdownTimer=null;}
+  const update=()=>{
+    const nodes=[...document.querySelectorAll('[data-payment-countdown]')];
+    if(!nodes.length){if(paymentCountdownTimer){clearInterval(paymentCountdownTimer);paymentCountdownTimer=null;}return;}
+    const now=Date.now();
+    nodes.forEach(el=>{
+      const end=paymentExpiryMs(el.dataset.paymentCountdown);
+      if(!end){el.textContent='Ikuti batas waktu pada instruksi pembayaran';return;}
+      const diff=Math.max(0,end-now);
+      if(diff<=0){el.textContent='Masa pembayaran berakhir';el.classList.add('expired');return;}
+      const total=Math.floor(diff/1000), h=Math.floor(total/3600), m=Math.floor((total%3600)/60), sec=total%60;
+      el.textContent=h>0?`${h}j ${String(m).padStart(2,'0')}m ${String(sec).padStart(2,'0')}d`:`${m}m ${String(sec).padStart(2,'0')}d`;
+      el.classList.remove('expired');
+    });
+  };
+  update();
+  if(document.querySelector('[data-payment-countdown]')) paymentCountdownTimer=setInterval(update,1000);
+}
 
 const state = {
   token: localStorage.getItem('uply_token') || '',
@@ -351,7 +379,7 @@ function readableError(value){
   }
   return String(value);
 }
-function paymentDescription(id){if(isAutomaticPayment(id))return 'Otomatis: transaksi dibuat via API dan status diperbarui melalui webhook/status sync.';if(id==='qris_manual')return 'Scan QRIS toko lalu upload bukti pembayaran.';if(id==='balance')return 'Gunakan saldo akun Uply.';return 'Transfer ke rekening toko lalu upload bukti.';}
+function paymentDescription(id){if(id==='belibayar')return 'QRIS atau Virtual Account otomatis. Status diperbarui melalui webhook/status sync.';if(isAutomaticPayment(id))return 'Otomatis: transaksi dibuat via API dan status diperbarui melalui webhook/status sync.';if(id==='qris_manual')return 'Scan QRIS toko lalu upload bukti pembayaran.';if(id==='balance')return 'Gunakan saldo akun Uply.';return 'Transfer ke rekening toko lalu upload bukti.';}
 
 function paymentMethodsPage(){
   const methods=state.catalog?.paymentMethods||[]; const banks=state.catalog?.banks||[]; const s=state.catalog?.settings||{};
@@ -445,13 +473,28 @@ function checkoutPage(id,variantId=''){
   const hasQrisManual=methods.some(m=>m.id==='qris_manual');
   const bankBlock=hasManual&&state.catalog.banks?.length?`<div class="payment-subpanel" data-pay-panel="manual" ${firstMethod!=='manual'?'hidden':''}><small>Pilih rekening tujuan</small>${state.catalog.banks.map((b,i)=>`<label class="payment-option"><input type="radio" name="bankId" value="${esc(b.id)}" ${i===0?'checked':''}><span><b>${esc(b.name)}</b><small>${esc(b.number)} · ${esc(b.holder)}</small></span></label>`).join('')}</div>`:'';
   const qrisBlock=hasQrisManual?`<div class="payment-subpanel qris-checkout-box" data-pay-panel="qris_manual" ${firstMethod!=='qris_manual'?'hidden':''}><img src="/api/qris-image?v=${Date.now()}" alt="QRIS Uply Digital"><div><strong>${esc(state.catalog.settings.qrisName||'QRIS Manual')}</strong><small>Bayar sesuai nominal yang tertera lalu upload bukti dari detail pesanan.</small></div></div>`:'';
+  const bbChannels=Array.isArray(state.catalog?.paymentChannels?.belibayar)?state.catalog.paymentChannels.belibayar:[];
+  const bbQris=bbChannels.find(c=>c.method==='qris');
+  const bbVa=bbChannels.filter(c=>c.method==='virtual_account');
+  const hasBelibayar=methods.some(m=>m.id==='belibayar');
+  const bbDefaultMethod=bbQris?'qris':(bbVa.length?'virtual_account':'qris');
+  const belibayarBlock=hasBelibayar?`<div class="payment-subpanel belibayar-checkout-panel" data-pay-panel="belibayar" ${firstMethod!=='belibayar'?'hidden':''}>
+    <div class="belibayar-choice-head"><strong>Pilih jenis pembayaran BeliBayar</strong><small>Hanya channel aktif di akun merchant yang ditampilkan.</small></div>
+    <div class="belibayar-method-tabs">
+      ${bbQris?`<label class="belibayar-method-card"><input type="radio" name="belibayarMethod" value="qris" ${bbDefaultMethod==='qris'?'checked':''}><span><b>▣ QRIS</b><small>Scan dari aplikasi bank atau e-wallet</small></span></label>`:''}
+      ${bbVa.length?`<label class="belibayar-method-card"><input type="radio" name="belibayarMethod" value="virtual_account" ${bbDefaultMethod==='virtual_account'?'checked':''}><span><b>VA Virtual Account</b><small>Transfer ke nomor VA bank pilihan</small></span></label>`:''}
+    </div>
+    ${bbQris?`<div class="belibayar-method-panel" data-belibayar-method-panel="qris" ${bbDefaultMethod!=='qris'?'hidden':''}><div class="bb-checkout-note"><span>QR</span><div><strong>QRIS Otomatis</strong><small>QR akan tampil langsung di halaman pesanan. Tidak perlu upload bukti.</small></div></div></div>`:''}
+    ${bbVa.length?`<div class="belibayar-method-panel" data-belibayar-method-panel="virtual_account" ${bbDefaultMethod!=='virtual_account'?'hidden':''}><small class="bb-bank-label">Pilih bank Virtual Account</small><div class="bb-bank-grid">${bbVa.map((c,i)=>`<label class="bb-bank-option"><input type="radio" name="paymentChannel" value="${esc(c.code)}" ${i===0?'checked':''}><span>${c.logoUrl?`<img src="${esc(c.logoUrl)}" alt="${esc(c.name)}">`:`<b>${esc(c.code.slice(0,3))}</b>`}<em>${esc(c.name||c.code)}</em></span></label>`).join('')}</div></div>`:''}
+    ${!bbQris&&!bbVa?'<div class="notice warn">Belum ada channel QRIS/Virtual Account BeliBayar yang aktif.</div>':''}
+  </div>`:'';
   const subtotal=unitPrice*initialQty, discount=state.appliedVoucher?.discount||0;
   const balance=Number(state.user.balance||0);
   const externalReady=methods.length>0;
   return `<section class="page checkout-page"><div class="wrap checkout-wrap"><a class="breadcrumb" href="#produk/${encodeURIComponent(p.id)}">← Kembali ke Produk</a><div class="checkout-title"><div><div class="section-kicker">Checkout Uply Digital</div><h1>Selesaikan pesananmu</h1><p>Voucher, saldo, dan metode pembayaran diproses server-side agar nominal tetap aman.</p></div><span class="checkout-secure">🔒 Checkout aman</span></div>
     <form id="checkoutForm" data-product-id="${esc(p.id)}" data-variant-id="${esc(v?.id||'')}" class="checkout-layout">
       <div class="stack">
-        <section class="checkout-section panel"><div class="section-label">METODE PEMBAYARAN</div>${payCards||'<div class="notice warn">Belum ada metode pembayaran eksternal aktif. Kamu tetap dapat checkout jika saldo Uply mencukupi seluruh total.</div>'}${bankBlock}${qrisBlock}</section>
+        <section class="checkout-section panel"><div class="section-label">METODE PEMBAYARAN</div>${payCards||'<div class="notice warn">Belum ada metode pembayaran eksternal aktif. Kamu tetap dapat checkout jika saldo Uply mencukupi seluruh total.</div>'}${bankBlock}${qrisBlock}${belibayarBlock}</section>
         <section class="checkout-section panel voucher-checkout"><div class="section-label">VOUCHER & SALDO</div><label class="field">Kode voucher<div class="inline-action"><input id="checkoutVoucher" name="voucherCode" value="${esc(state.appliedVoucher?.code||'')}" placeholder="Contoh: UPLY10"><button type="button" class="btn light small" data-checkout-voucher>Terapkan</button></div><small id="voucherHint">${state.appliedVoucher?`Voucher ${esc(state.appliedVoucher.code)} aktif · hemat ${money(state.appliedVoucher.discount)}`:'Voucher akan diverifikasi ke server sebelum digunakan.'}</small></label>${state.catalog.settings.balancePaymentEnabled?`<label class="balance-toggle"><input type="checkbox" name="useBalance" id="useBalance" ${balance>0?'':'disabled'}><span><b>Gunakan Saldo Uply</b><small>Saldo tersedia: ${money(balance)}</small></span></label>`:''}</section>
 ${p.requiresLoginCredentials?`<section class="checkout-section panel credential-section"><div class="section-label">LOGIN AKUN UNTUK PROSES TOP UP</div><div class="credential-notice"><strong>Proses manual oleh admin</strong><p>Masukkan email dan password akun tujuan. Data disimpan terenkripsi dan dihapus otomatis setelah pesanan selesai/dibatalkan.</p><b>Jangan masukkan OTP, recovery code, PIN keamanan, atau kode 2FA.</b></div><label class="field">Email login akun<input name="accountEmail" type="email" autocomplete="off" required placeholder="email akun tujuan"></label><label class="field">Password akun<input name="accountPassword" type="password" autocomplete="new-password" required minlength="4" maxlength="200" placeholder="Password akun tujuan"></label></section>`:''}
         <section class="checkout-section panel"><div class="section-label">KONTAK</div><div class="row"><label class="field">Nama Lengkap<input name="name" required minlength="2" maxlength="80" value="${esc(state.user.name)}"></label><label class="field">Email<input value="${esc(state.user.email)}" readonly><small>Email dari akun Uply Digital.</small></label></div><label class="field">WhatsApp<input name="phone" type="tel" maxlength="24" placeholder="Contoh: 081234567890"><small>Wajib jika detail dikirim melalui WhatsApp.</small></label><label class="field">Kirim detail melalui<select name="channel" id="checkoutChannel"><option value="email">Email</option><option value="whatsapp">WhatsApp</option></select></label><label class="field">Catatan untuk admin <small>Opsional</small><textarea name="customerNote" maxlength="800" placeholder="Contoh: mohon proses untuk region Indonesia atau informasi tambahan lainnya."></textarea></label></section>
@@ -486,6 +529,8 @@ function setCheckoutQty(next){
 function togglePaymentPanels(){
   const selected=document.querySelector('#checkoutForm input[name="paymentMethod"]:checked')?.value||'';
   document.querySelectorAll('[data-pay-panel]').forEach(el=>el.hidden=el.dataset.payPanel!==selected);
+  const bbMethod=document.querySelector('#checkoutForm input[name="belibayarMethod"]:checked')?.value||'qris';
+  document.querySelectorAll('[data-belibayar-method-panel]').forEach(el=>el.hidden=el.dataset.belibayarMethodPanel!==bbMethod);
 }
 
 function memberStatusHTML(completedCount, spent, currentTier='customer'){
@@ -570,7 +615,7 @@ function invoiceNumber(o){ return 'INV-' + String(o.id||'').replace(/^UPL-/,'');
 function invoiceChip(ps){ return `<span class="status ${esc(ps.cls)}">${esc(ps.label)}</span>`; }
 function invoiceDate(v){ return v ? dt(v) : '—'; }
 function paymentMethod(o){
-  if(isAutomaticPayment(o.paymentMode)) return `${gatewayDisplay(o.paymentMode)}${o.paymentData?.method?' · '+o.paymentData.method:''}`;
+  if(isAutomaticPayment(o.paymentMode)){const m=String(o.paymentData?.method||'');const ml=m==='virtual_account'?'Virtual Account':m==='qris'?'QRIS':m;return `${gatewayDisplay(o.paymentMode)}${ml?' · '+ml:''}${m==='virtual_account'&&o.paymentData?.channel?' '+o.paymentData.channel:''}`;}
   if(o.paymentMode==='qris_manual') return 'QRIS Manual';
   if(o.paymentMode==='balance') return 'Saldo Uply';
   if(o.paymentMode==='xendit') return 'Xendit (order lama)';
@@ -624,15 +669,42 @@ function orderDetail(id){
   }
   if(o.status==='pending_payment' && isAutomaticPayment(o.paymentMode)){
     const pd=o.paymentData||{}, provider=gatewayDisplay(o.paymentMode);
-    const url=pd.paymentUrl?`<a class="btn full" href="${esc(pd.paymentUrl)}" target="_blank" rel="noopener">Lanjut bayar melalui ${esc(provider)} →</a>`:'';
-    const qr=pd.qrUrl?`<div class="qris-order-pay"><img src="${esc(pd.qrUrl)}" alt="QR pembayaran ${esc(provider)}"><div><strong>QR pembayaran ${esc(provider)}</strong><p>Bayar tepat <b>${money(o.total)}</b>.</p></div></div>`:'';
-    const va=pd.vaNumber?`<div class="bank"><strong>Virtual Account ${esc(pd.channel||provider)}</strong><div class="bank-number">${esc(pd.vaNumber)}</div><span>Total ${money(o.total)}</span></div>`:'';
-    const code=pd.paymentCode?`<div class="notice"><strong>Kode pembayaran:</strong> ${esc(pd.paymentCode)}</div>`:'';
-    const instruction=url+qr+va+code, hasInstruction=!!instruction;
+    const method=String(pd.method||'').toLowerCase();
+    const channel=String(pd.channel||'').toUpperCase();
+    const isBelibayar=o.paymentMode==='belibayar';
+    const channelMeta=(state.catalog?.paymentChannels?.belibayar||[]).find(c=>String(c.code).toUpperCase()===channel)||null;
+
+    let instruction='';
+    if(isBelibayar && method==='qris' && pd.qrUrl){
+      instruction=`<div class="bb-payment-card bb-qris-payment">
+        <div class="bb-payment-heading"><span class="bb-provider-chip">BeliBayar · QRIS</span><strong>Scan QR untuk membayar</strong><small>Gunakan aplikasi bank atau e-wallet yang mendukung QRIS.</small></div>
+        <div class="bb-qr-frame"><img src="${esc(pd.qrUrl)}" alt="QRIS pembayaran BeliBayar"></div>
+        <div class="bb-payment-total"><span>Total pembayaran</span><strong>${money(o.total)}</strong></div>
+        <div class="bb-payment-expiry"><span>Waktu tersisa</span><b data-payment-countdown="${esc(String(pd.expiredAt||''))}">Menghitung…</b></div>
+        <div class="button-row bb-payment-actions"><button type="button" class="btn light" data-sync-pay="${esc(o.id)}">↻ Cek status</button><a class="btn light" href="${esc(pd.qrUrl)}" target="_blank" rel="noopener">Buka QR layar penuh</a></div>
+      </div>`;
+    }else if(isBelibayar && method==='virtual_account' && (pd.vaNumber||pd.paymentCode)){
+      const vaValue=pd.vaNumber||pd.paymentCode;
+      instruction=`<div class="bb-payment-card bb-va-payment">
+        <div class="bb-payment-heading">${channelMeta?.logoUrl?`<img class="bb-bank-logo" src="${esc(channelMeta.logoUrl)}" alt="${esc(channelMeta.name||channel)}">`:''}<span class="bb-provider-chip">BeliBayar · Virtual Account</span><strong>${esc(channelMeta?.name||('VA '+channel))}</strong><small>Transfer tepat sesuai nominal. Verifikasi dilakukan otomatis.</small></div>
+        <div class="bb-va-number"><span>Nomor Virtual Account</span><strong>${esc(vaValue)}</strong><button type="button" class="btn light small" data-copy-payment="${esc(vaValue)}">Salin nomor</button></div>
+        <div class="bb-payment-total"><span>Total pembayaran</span><strong>${money(o.total)}</strong></div>
+        <div class="bb-payment-expiry"><span>Waktu tersisa</span><b data-payment-countdown="${esc(String(pd.expiredAt||''))}">Menghitung…</b></div>
+        <div class="button-row bb-payment-actions"><button type="button" class="btn light" data-sync-pay="${esc(o.id)}">↻ Cek status pembayaran</button></div>
+      </div>`;
+    }else{
+      const url=pd.paymentUrl?`<a class="btn full" href="${esc(pd.paymentUrl)}" target="_blank" rel="noopener">Lanjut bayar melalui ${esc(provider)} →</a>`:'';
+      const qr=pd.qrUrl?`<div class="qris-order-pay"><img src="${esc(pd.qrUrl)}" alt="QR pembayaran ${esc(provider)}"><div><strong>QR pembayaran ${esc(provider)}</strong><p>Bayar tepat <b>${money(o.total)}</b>.</p></div></div>`:'';
+      const va=pd.vaNumber?`<div class="bank"><strong>Virtual Account ${esc(pd.channel||provider)}</strong><div class="bank-number">${esc(pd.vaNumber)}</div><span>Total ${money(o.total)}</span></div>`:'';
+      const code=pd.paymentCode?`<div class="notice"><strong>Kode pembayaran:</strong> ${esc(pd.paymentCode)}</div>`:'';
+      instruction=url+qr+va+code;
+    }
+
+    const hasInstruction=!!instruction;
     const gatewayError=String(o.gatewayStatus||'').toLowerCase()==='error'
       ? `<div class="notice error"><strong>${esc(provider)} belum berhasil membuat transaksi.</strong><br>${esc(readableError((o.note||'Periksa koneksi backend pembayaran lalu tekan Buat pembayaran.').split('\n').slice(-1)[0]).replace(/\[object Object\]/g,'Detail error gateway tidak terbaca pada versi lama. Tekan Buat pembayaran lagi.'))}</div>`
       : '';
-    pay=`<div class="panel"><h2>Pembayaran otomatis · ${esc(provider)}</h2><p>Status gateway: <strong>${esc(o.gatewayStatus||'belum dibuat')}</strong></p>${gatewayError}${instruction}<div class="button-row">${!hasInstruction?`<button class="btn" data-pay="${esc(o.id)}">Buat pembayaran</button>`:''}<button class="btn light" data-sync-pay="${esc(o.id)}">↻ Cek status pembayaran</button></div>${pd.transactionId?`<p class="tiny">ID transaksi: ${esc(pd.transactionId)}</p>`:''}<p class="tiny">Status pembayaran diperbarui otomatis. Tombol Cek status tetap tersedia sebagai cadangan.</p></div>`;
+    pay=`<div class="panel automatic-payment-panel"><h2>Pembayaran otomatis · ${esc(provider)}</h2><p>Status gateway: <strong>${esc(o.gatewayStatus||'belum dibuat')}</strong></p>${gatewayError}${instruction}<div class="button-row">${!hasInstruction?`<button class="btn" data-pay="${esc(o.id)}">Buat pembayaran</button>`:''}${!(isBelibayar&&hasInstruction)?`<button class="btn light" data-sync-pay="${esc(o.id)}">↻ Cek status pembayaran</button>`:''}</div>${pd.transactionId?`<p class="tiny">ID transaksi: ${esc(pd.transactionId)}</p>`:''}<p class="tiny">Status pembayaran diperbarui otomatis melalui webhook. Tombol cek status tersedia sebagai cadangan.</p></div>`;
   }
   if(o.status==='pending_payment' && o.paymentMode==='xendit'){
     pay=`<div class="notice warn"><strong>Order gateway versi lama.</strong><br>V25 menggunakan sistem pembayaran yang aktif pada konfigurasi toko. Jangan lanjutkan link gateway lama. Batalkan order ini lalu buat order baru agar pembayaran dibuat melalui Midtrans.</div>`;
@@ -784,7 +856,7 @@ kode-003"></textarea></label><button class="btn light" type="submit">Import daft
       const statusText=ready?(enabled?'AKTIF':'SIAP · OFF'):'BELUM SIAP';
       return `<label class="gateway-toggle-card ${enabled?'is-enabled':''} ${ready?'is-ready':'is-not-ready'}"><span class="gateway-toggle-mark ${id}">${id==='midtrans'?'M':id==='belibayar'?'BB':'D'}</span><span class="gateway-toggle-copy"><strong>${esc(label)}</strong><small>${esc(description)}</small><em>${esc(g.environment||'')} · ${g.configured?'konfigurasi terdeteksi':'konfigurasi belum lengkap'}${g.requiresStaticIp?' · static IP/whitelist':''}</em></span><span class="gateway-toggle-side"><b>${statusText}</b><input name="${inputName}" type="checkbox" ${enabled?'checked':''} ${ready?'':'disabled'}><i aria-hidden="true"></i></span></label>`;
     };
-    return `<div class="admin-grid-2"><form id="settingsForm" class="panel"><h2>Pengaturan toko</h2><label class="field">Nama toko<input name="storeName" value="${esc(s.storeName||'Uply Digital')}" required></label><label class="field">WhatsApp admin<input name="whatsapp" value="${esc(s.whatsapp||'')}" placeholder="628123456789"></label><label class="field">Jam layanan<input name="hours" value="${esc(s.hours||'')}"></label><label class="field">Batas pembayaran (jam)<input name="paymentHours" type="number" min="1" max="72" value="${Number(s.paymentHours)||24}"></label><label class="field">Pengumuman toko<textarea name="notice">${esc(s.notice||'')}</textarea></label><label class="field">Banner promo homepage<textarea name="promoBanner" maxlength="180">${esc(s.promoBanner||'')}</textarea></label><div class="setting-switches"><label class="check"><input name="storeOpen" type="checkbox" ${s.storeOpen?'checked':''}> Terima pesanan baru</label><label class="check"><input name="autoRoleEnabled" type="checkbox" ${s.autoRoleEnabled?'checked':''}> Role Connector otomatis</label></div><section class="gateway-manager"><div class="gateway-manager-head"><div><span class="section-kicker">PAYMENT GATEWAY</span><h3>Aktif / Nonaktif Metode Otomatis</h3><p>Gateway yang Ready bisa dinyalakan atau dimatikan kapan saja. Perubahan berlaku setelah tombol Simpan pengaturan ditekan.</p></div></div><div class="gateway-toggle-list">${gatewaySwitch('midtrans','midtransPaymentEnabled','Midtrans','Snap / pembayaran otomatis')}${gatewaySwitch('belibayar','belibayarPaymentEnabled','BeliBayar','QRIS Production melalui Windows backend')}${gatewaySwitch('duitku','duitkuPaymentEnabled','Duitku','Gateway otomatis Duitku')}</div><div class="gateway-manual-toggles"><label class="manual-toggle-card"><span><b>Transfer Bank Manual</b><small>Tampilkan pilihan transfer rekening bank di checkout.</small></span><input name="manualPaymentEnabled" type="checkbox" ${s.manualPaymentEnabled?'checked':''} aria-label="Aktifkan Transfer Bank Manual"></label><label class="manual-toggle-card"><span><b>QRIS Manual</b><small>QRIS gambar toko + upload bukti. Bisa dimatikan tanpa menghapus gambar QRIS.</small></span><input name="qrisManualPaymentEnabled" type="checkbox" ${s.qrisManualPaymentEnabled?'checked':''} aria-label="Aktifkan QRIS Manual"></label><label class="manual-toggle-card"><span><b>Saldo Uply</b><small>Izinkan pelanggan membayar menggunakan saldo akun.</small></span><input name="balancePaymentEnabled" type="checkbox" ${s.balancePaymentEnabled?'checked':''} aria-label="Aktifkan Saldo Uply"></label></div></section><div class="qris-admin-box"><div class="qris-admin-title"><div><h3>QRIS Manual</h3><small>Gambar tetap tersimpan walaupun metode QRIS Manual sedang OFF.</small></div><span class="qris-state ${s.qrisManualPaymentEnabled&&s.qrisManualReady?'on':'off'}">${s.qrisManualPaymentEnabled?(s.qrisManualReady?'AKTIF':'BUTUH GAMBAR'):'NONAKTIF'}</span></div><label class="field">Nama QRIS<input name="qrisName" value="${esc(s.qrisName||'QRIS Manual')}"></label><label class="field">Upload gambar QRIS<input type="file" name="qrisFile" accept="image/png,image/jpeg,image/webp"><small>Dipakai sebagai pembayaran manual. Status tidak otomatis tanpa API/webhook provider.</small></label>${s.qrisManualReady?`<div class="qris-preview-admin"><img src="/api/qris-image?v=${Date.now()}" alt="QRIS"><label class="check"><input type="checkbox" name="clearQris"> Hapus QRIS tersimpan</label></div>`:''}</div><button class="btn full" type="submit">Simpan pengaturan pembayaran</button></form><div class="stack"><div class="panel"><div class="toolbar"><div><h2>Status Payment Gateway</h2><p class="tiny">Ready = konfigurasi server siap. Aktif = ditampilkan di checkout.</p></div></div><div class="payment-health">${(s.paymentMethods||[]).map(m=>`<div><span>${m.id==='midtrans'?'⚡':m.id==='belibayar'?'BB':m.id==='duitku'?'D':m.id==='balance'?'💰':m.id==='qris_manual'?'▣':'🏦'}</span><div><strong>${esc(m.label)}</strong><small>${esc(m.type)}</small></div><b>Aktif</b></div>`).join('')||'<div class="notice warn">Belum ada metode pembayaran aktif.</div>'}</div>${s.gatewayHealth?`<div class="gateway-health-grid">${Object.entries(s.gatewayHealth).map(([id,g])=>`<div class="notice ${g.ready?'ok':'warn'}"><strong>${esc(g.label)} · ${g.ready?'Ready':'Belum siap'}</strong><br><small>${esc(g.environment||'')} · ${g.configured?'credential terdeteksi':'credential belum lengkap'}${g.requiresStaticIp?' · membutuhkan IP whitelist/static IP':''}</small><br>${esc(g.note||'')}</div>`).join('')}</div>`:''}<div class="notice ok gateway-v311-note"><strong>V31.1:</strong> BeliBayar/Duitku yang baru selesai dikonfigurasi akan diaktifkan satu kali otomatis. Setelah itu toggle admin tetap menjadi sumber kontrol utama.</div></div><div class="panel"><div class="toolbar"><div><h2>Rekening pembayaran</h2><p class="tiny">Untuk transfer manual.</p></div></div>${d.banks.map(b=>`<div class="bank-row"><span><strong>${esc(b.name)}</strong><small>${esc(b.number)} · ${esc(b.holder)}</small></span><button class="text-btn" data-edit-bank="${esc(b.id)}">Edit</button></div>`).join('')}</div></div></div>`;
+    return `<div class="admin-grid-2"><form id="settingsForm" class="panel"><h2>Pengaturan toko</h2><label class="field">Nama toko<input name="storeName" value="${esc(s.storeName||'Uply Digital')}" required></label><label class="field">WhatsApp admin<input name="whatsapp" value="${esc(s.whatsapp||'')}" placeholder="628123456789"></label><label class="field">Jam layanan<input name="hours" value="${esc(s.hours||'')}"></label><label class="field">Batas pembayaran (jam)<input name="paymentHours" type="number" min="1" max="72" value="${Number(s.paymentHours)||24}"></label><label class="field">Pengumuman toko<textarea name="notice">${esc(s.notice||'')}</textarea></label><label class="field">Banner promo homepage<textarea name="promoBanner" maxlength="180">${esc(s.promoBanner||'')}</textarea></label><div class="setting-switches"><label class="check"><input name="storeOpen" type="checkbox" ${s.storeOpen?'checked':''}> Terima pesanan baru</label><label class="check"><input name="autoRoleEnabled" type="checkbox" ${s.autoRoleEnabled?'checked':''}> Role Connector otomatis</label></div><section class="gateway-manager"><div class="gateway-manager-head"><div><span class="section-kicker">PAYMENT GATEWAY</span><h3>Aktif / Nonaktif Metode Otomatis</h3><p>Gateway yang Ready bisa dinyalakan atau dimatikan kapan saja. Perubahan berlaku setelah tombol Simpan pengaturan ditekan.</p></div></div><div class="gateway-toggle-list">${gatewaySwitch('midtrans','midtransPaymentEnabled','Midtrans','Snap / pembayaran otomatis')}${gatewaySwitch('belibayar','belibayarPaymentEnabled','BeliBayar','QRIS + Virtual Account melalui Windows backend')}${gatewaySwitch('duitku','duitkuPaymentEnabled','Duitku','Gateway otomatis Duitku')}</div><div class="gateway-manual-toggles"><label class="manual-toggle-card"><span><b>Transfer Bank Manual</b><small>Tampilkan pilihan transfer rekening bank di checkout.</small></span><input name="manualPaymentEnabled" type="checkbox" ${s.manualPaymentEnabled?'checked':''} aria-label="Aktifkan Transfer Bank Manual"></label><label class="manual-toggle-card"><span><b>QRIS Manual</b><small>QRIS gambar toko + upload bukti. Bisa dimatikan tanpa menghapus gambar QRIS.</small></span><input name="qrisManualPaymentEnabled" type="checkbox" ${s.qrisManualPaymentEnabled?'checked':''} aria-label="Aktifkan QRIS Manual"></label><label class="manual-toggle-card"><span><b>Saldo Uply</b><small>Izinkan pelanggan membayar menggunakan saldo akun.</small></span><input name="balancePaymentEnabled" type="checkbox" ${s.balancePaymentEnabled?'checked':''} aria-label="Aktifkan Saldo Uply"></label></div></section><div class="qris-admin-box"><div class="qris-admin-title"><div><h3>QRIS Manual</h3><small>Gambar tetap tersimpan walaupun metode QRIS Manual sedang OFF.</small></div><span class="qris-state ${s.qrisManualPaymentEnabled&&s.qrisManualReady?'on':'off'}">${s.qrisManualPaymentEnabled?(s.qrisManualReady?'AKTIF':'BUTUH GAMBAR'):'NONAKTIF'}</span></div><label class="field">Nama QRIS<input name="qrisName" value="${esc(s.qrisName||'QRIS Manual')}"></label><label class="field">Upload gambar QRIS<input type="file" name="qrisFile" accept="image/png,image/jpeg,image/webp"><small>Dipakai sebagai pembayaran manual. Status tidak otomatis tanpa API/webhook provider.</small></label>${s.qrisManualReady?`<div class="qris-preview-admin"><img src="/api/qris-image?v=${Date.now()}" alt="QRIS"><label class="check"><input type="checkbox" name="clearQris"> Hapus QRIS tersimpan</label></div>`:''}</div><button class="btn full" type="submit">Simpan pengaturan pembayaran</button></form><div class="stack"><div class="panel"><div class="toolbar"><div><h2>Status Payment Gateway</h2><p class="tiny">Ready = konfigurasi server siap. Aktif = ditampilkan di checkout.</p></div></div><div class="payment-health">${(s.paymentMethods||[]).map(m=>`<div><span>${m.id==='midtrans'?'⚡':m.id==='belibayar'?'BB':m.id==='duitku'?'D':m.id==='balance'?'💰':m.id==='qris_manual'?'▣':'🏦'}</span><div><strong>${esc(m.label)}</strong><small>${esc(m.type)}</small></div><b>Aktif</b></div>`).join('')||'<div class="notice warn">Belum ada metode pembayaran aktif.</div>'}</div>${s.gatewayHealth?`<div class="gateway-health-grid">${Object.entries(s.gatewayHealth).map(([id,g])=>`<div class="notice ${g.ready?'ok':'warn'}"><strong>${esc(g.label)} · ${g.ready?'Ready':'Belum siap'}</strong><br><small>${esc(g.environment||'')} · ${g.configured?'credential terdeteksi':'credential belum lengkap'}${g.requiresStaticIp?' · membutuhkan IP whitelist/static IP':''}</small><br>${esc(g.note||'')}</div>`).join('')}</div>`:''}<div class="notice ok gateway-v311-note"><strong>V31.1:</strong> BeliBayar/Duitku yang baru selesai dikonfigurasi akan diaktifkan satu kali otomatis. Setelah itu toggle admin tetap menjadi sumber kontrol utama.</div></div><div class="panel"><div class="toolbar"><div><h2>Rekening pembayaran</h2><p class="tiny">Untuk transfer manual.</p></div></div>${d.banks.map(b=>`<div class="bank-row"><span><strong>${esc(b.name)}</strong><small>${esc(b.number)} · ${esc(b.holder)}</small></span><button class="text-btn" data-edit-bank="${esc(b.id)}">Edit</button></div>`).join('')}</div></div></div>`;
   }
 
 
@@ -943,6 +1015,7 @@ async function route(){
   }
   else if(hash==='admin') app.innerHTML = await adminPage();
   else { location.hash='#katalog'; return; }
+  setupPaymentCountdowns();
   window.scrollTo({top:0,behavior:'instant'});
 }
 
@@ -972,6 +1045,7 @@ app.addEventListener('change', e => {
   }
   if(e.target.id==='useBalance') checkoutRecalc();
   if(e.target.name==='paymentMethod'){togglePaymentPanels();checkoutRecalc();}
+  if(e.target.name==='belibayarMethod'){togglePaymentPanels();checkoutRecalc();}
   if(e.target.id==='checkoutChannel'){
     const form=e.target.closest('#checkoutForm'); const phoneInput=form?.elements?.phone; if(phoneInput) phoneInput.required=e.target.value==='whatsapp';
   }
@@ -979,6 +1053,7 @@ app.addEventListener('change', e => {
 
 document.addEventListener('click', async e => {
   if(e.target.closest('[data-theme-open]')){ themeModal(); return; }
+  const copyPayment=e.target.closest('[data-copy-payment]'); if(copyPayment){try{await navigator.clipboard.writeText(copyPayment.dataset.copyPayment||'');msg('Nomor Virtual Account disalin.');}catch{msg('Tidak dapat menyalin otomatis. Tekan lama nomor VA untuk menyalin.');}return;}
   const themePick=e.target.closest('[data-theme-value]'); if(themePick){applyTheme(themePick.dataset.themeValue);closeModal();msg('Tema diubah ke '+themeLabel[themePick.dataset.themeValue]+'.');return;}
   if(e.target.closest('[data-cart-open]')){openCart();return;}
   if(e.target.closest('[data-cart-close]')){closeCart();return;}
@@ -1032,7 +1107,7 @@ document.addEventListener('click', async e => {
     state.pendingCheckout=''; location.hash='#checkout/'+encodeURIComponent(id); if((location.hash||'')==='#checkout/'+encodeURIComponent(id)) await route(); return;
   }
   const checkoutLogin=e.target.closest('[data-checkout-login]'); if(checkoutLogin){state.pendingCheckout=checkoutLogin.dataset.checkoutLogin;state.pendingVariantId=checkoutLogin.dataset.variantId||'';openModal('Masuk untuk checkout',loginForm(false));return;}
-  const pay = e.target.closest('[data-pay]'); if(pay){ try{const r=await api('retryPayment',{orderId:pay.dataset.pay}); if(r.paymentUrl){location.href=r.paymentUrl;}else{state.orders=await api('orders');await route();msg('Instruksi pembayaran gateway berhasil dibuat.');}}catch(err){msg(err.message)} return; }
+  const pay = e.target.closest('[data-pay]'); if(pay){ try{const r=await api('retryPayment',{orderId:pay.dataset.pay});state.orders=await api('orders');const current=state.orders.find(o=>o.id===pay.dataset.pay);if(r.paymentUrl&&current?.paymentMode!=='belibayar'){location.href=r.paymentUrl;}else{await route();msg('Instruksi pembayaran gateway berhasil dibuat.');}}catch(err){msg(err.message)} return; }
   const syncPay=e.target.closest('[data-sync-pay]'); if(syncPay){try{const r=await api('syncPaymentStatus',{orderId:syncPay.dataset.syncPay});state.orders=await api('orders');await route();msg(r.state==='success'?'Pembayaran sudah terverifikasi.':'Status pembayaran diperbarui.');}catch(err){msg(err.message)}return;}
   const cancel = e.target.closest('[data-cancel]'); if(cancel){ if(confirm('Batalkan pesanan ini?')){try{await api('cancelOrder',{orderId:cancel.dataset.cancel});state.orders=await api('orders');state.user=await api('me');setAccount();await route();msg('Pesanan dibatalkan.')}catch(err){msg(err.message)}}return; }
   const cred = e.target.closest('[data-order-credentials]'); if(cred){ try{const r=await api('getOrderCredentials',{orderId:cred.dataset.orderCredentials});openModal('Login akun untuk proses',`<div class="notice warn"><strong>Data sensitif.</strong><br>Gunakan hanya untuk pesanan ini. Jangan meminta OTP, recovery code, atau kode 2FA.</div><label class="field">Email<input readonly value="${esc(r.email)}"></label><label class="field">Password<div class="copy-secret-row"><input readonly type="password" id="credentialPassword" value="${esc(r.password)}"><button class="btn light small" type="button" data-copy="${esc(r.password)}">Salin</button></div></label>`);}catch(err){msg(err.message)} return; }
@@ -1091,7 +1166,7 @@ document.addEventListener('submit', async e => {
     } else if(f.id==='checkoutForm'){
       if(!fd.has('agree')) throw Error('Centang persetujuan ketentuan produk terlebih dahulu.');
       if(g('channel')==='whatsapp' && !g('phone').trim()) throw Error('Isi nomor WhatsApp jika detail ingin dikirim lewat WhatsApp.');
-      const requestPayload={productId:f.dataset.productId,variantId:f.dataset.variantId||'',quantity:Number(g('quantity')),name:g('name'),phone:g('phone'),channel:g('channel'),bankId:g('bankId'),customerNote:g('customerNote'),accountEmail:g('accountEmail'),accountPassword:g('accountPassword'),paymentMethod:g('paymentMethod'),paymentChannel:g('paymentChannel'),voucherCode:g('voucherCode')||state.appliedVoucher?.code||'',useBalance:fd.has('useBalance'),agree:true};
+      const requestPayload={productId:f.dataset.productId,variantId:f.dataset.variantId||'',quantity:Number(g('quantity')),name:g('name'),phone:g('phone'),channel:g('channel'),bankId:g('bankId'),customerNote:g('customerNote'),accountEmail:g('accountEmail'),accountPassword:g('accountPassword'),paymentMethod:g('paymentMethod'),paymentSubmethod:g('belibayarMethod'),paymentChannel:g('paymentChannel'),voucherCode:g('voucherCode')||state.appliedVoucher?.code||'',useBalance:fd.has('useBalance'),agree:true};
       await api('checkoutPreflight',requestPayload);
       const req=f.dataset.requestId||(crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2));
       f.dataset.requestId=req;
@@ -1099,7 +1174,8 @@ document.addEventListener('submit', async e => {
       delete f.dataset.requestId;
       state.orders=await api('orders'); state.user=await api('me'); setAccount();
       state.checkoutQty=1;state.appliedVoucher=null;if(state.cart?.productId===f.dataset.productId&&String(state.cart?.variantId||'')===String(f.dataset.variantId||'')){state.cart=null;saveCart();}
-      if(r.paymentUrl){msg('Pesanan dibuat. Membuka pembayaran…');setTimeout(()=>location.assign(r.paymentUrl),650)}
+      const createdMode=r.order?.paymentMode||g('paymentMethod')||'';
+      if(r.paymentUrl && createdMode!=='belibayar'){msg('Pesanan dibuat. Membuka pembayaran…');setTimeout(()=>location.assign(r.paymentUrl),650)}
       else{
         location.hash='#pesanan/'+encodeURIComponent(r.order.id);await route();
         const provider=gatewayDisplay(r.order?.paymentMode||g('paymentMethod')||'gateway');
