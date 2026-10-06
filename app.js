@@ -531,11 +531,45 @@ function setCheckoutQty(next){
   input.value=String(qty); state.checkoutQty=qty; checkoutRecalc();
 }
 
+function resetCheckoutAttempt(form=document.querySelector('#checkoutForm')){
+  if(!form) return;
+  delete form.dataset.requestId;
+  delete form.dataset.requestFingerprint;
+}
+
+function checkoutIntentFingerprint(form, payload={}){
+  const method=String(payload.paymentMethod||'');
+  const sub=method==='belibayar'?String(payload.paymentSubmethod||'qris') : '';
+  const channel=method==='belibayar'&&sub==='virtual_account'?String(payload.paymentChannel||'').toUpperCase():'';
+  return JSON.stringify({
+    productId:String(form?.dataset.productId||payload.productId||''),
+    variantId:String(form?.dataset.variantId||payload.variantId||''),
+    quantity:Number(payload.quantity||1),
+    paymentMethod:method,
+    paymentSubmethod:sub,
+    paymentChannel:channel,
+    bankId:method==='manual'?String(payload.bankId||''):'',
+    voucherCode:String(payload.voucherCode||''),
+    useBalance:!!payload.useBalance
+  });
+}
+
 function togglePaymentPanels(){
-  const selected=document.querySelector('#checkoutForm input[name="paymentMethod"]:checked')?.value||'';
+  const form=document.querySelector('#checkoutForm');
+  const selected=form?.querySelector('input[name="paymentMethod"]:checked')?.value||'';
   document.querySelectorAll('[data-pay-panel]').forEach(el=>el.hidden=el.dataset.payPanel!==selected);
-  const bbMethod=document.querySelector('#checkoutForm input[name="belibayarMethod"]:checked')?.value||'qris';
+
+  const bbMethodInputs=[...(form?.querySelectorAll('input[name="belibayarMethod"]')||[])];
+  const bbActive=selected==='belibayar';
+  bbMethodInputs.forEach(el=>{el.disabled=!bbActive;});
+  const bbMethod=(bbMethodInputs.find(el=>el.checked)?.value)||'qris';
   document.querySelectorAll('[data-belibayar-method-panel]').forEach(el=>el.hidden=el.dataset.belibayarMethodPanel!==bbMethod);
+
+  // V32.0: bank VA yang tersembunyi tidak boleh ikut terkirim saat QRIS dipilih.
+  const vaInputs=[...(form?.querySelectorAll('input[name="paymentChannel"]')||[])];
+  const vaActive=bbActive&&bbMethod==='virtual_account';
+  vaInputs.forEach(el=>{el.disabled=!vaActive;});
+  if(vaActive&&vaInputs.length&&!vaInputs.some(el=>el.checked)) vaInputs[0].checked=true;
 }
 
 function memberStatusHTML(completedCount, spent, currentTier='customer'){
@@ -1021,6 +1055,7 @@ async function route(){
   else if(hash==='admin') app.innerHTML = await adminPage();
   else { location.hash='#katalog'; return; }
   setupPaymentCountdowns();
+  if(hash.startsWith('checkout/')) togglePaymentPanels();
   window.scrollTo({top:0,behavior:'instant'});
 }
 
@@ -1046,11 +1081,12 @@ app.addEventListener('change', e => {
   if(e.target.id==='inventoryStatusFilter'){ state.inventoryStatus=e.target.value; $('#adminContent').innerHTML=adminContent(); }
   if(e.target.id==='checkoutQuantity'){
     if(state.appliedVoucher && Number(state.appliedVoucher.qty)!==Number(e.target.value||1)){state.appliedVoucher=null;const h=$('#voucherHint');if(h)h.textContent='Jumlah berubah. Terapkan voucher kembali.';}
-    checkoutRecalc();
+    resetCheckoutAttempt(e.target.closest('#checkoutForm'));checkoutRecalc();
   }
-  if(e.target.id==='useBalance') checkoutRecalc();
-  if(e.target.name==='paymentMethod'){togglePaymentPanels();checkoutRecalc();}
-  if(e.target.name==='belibayarMethod'){togglePaymentPanels();checkoutRecalc();}
+  if(e.target.id==='useBalance'){resetCheckoutAttempt(e.target.closest('#checkoutForm'));checkoutRecalc();}
+  if(e.target.name==='paymentMethod'){resetCheckoutAttempt(e.target.closest('#checkoutForm'));togglePaymentPanels();checkoutRecalc();}
+  if(e.target.name==='belibayarMethod'){resetCheckoutAttempt(e.target.closest('#checkoutForm'));togglePaymentPanels();checkoutRecalc();}
+  if(e.target.name==='paymentChannel'||e.target.name==='bankId'){resetCheckoutAttempt(e.target.closest('#checkoutForm'));checkoutRecalc();}
   if(e.target.id==='checkoutChannel'){
     const form=e.target.closest('#checkoutForm'); const phoneInput=form?.elements?.phone; if(phoneInput) phoneInput.required=e.target.value==='whatsapp';
   }
@@ -1172,11 +1208,36 @@ document.addEventListener('submit', async e => {
       if(!fd.has('agree')) throw Error('Centang persetujuan ketentuan produk terlebih dahulu.');
       if(g('channel')==='whatsapp' && !g('phone').trim()) throw Error('Isi nomor WhatsApp jika detail ingin dikirim lewat WhatsApp.');
       const requestPayload={productId:f.dataset.productId,variantId:f.dataset.variantId||'',quantity:Number(g('quantity')),name:g('name'),phone:g('phone'),channel:g('channel'),bankId:g('bankId'),customerNote:g('customerNote'),accountEmail:g('accountEmail'),accountPassword:g('accountPassword'),paymentMethod:g('paymentMethod'),paymentSubmethod:g('belibayarMethod'),paymentChannel:g('paymentChannel'),voucherCode:g('voucherCode')||state.appliedVoucher?.code||'',useBalance:fd.has('useBalance'),agree:true};
+      // V32.0: normalisasi pilihan BeliBayar. Channel VA tidak boleh bocor ke request QRIS.
+      if(requestPayload.paymentMethod!=='belibayar'){
+        requestPayload.paymentSubmethod='';
+        requestPayload.paymentChannel='';
+      }else if(requestPayload.paymentSubmethod==='qris'){
+        requestPayload.paymentChannel='';
+      }
       await api('checkoutPreflight',requestPayload);
+
+      const fingerprint=checkoutIntentFingerprint(f,requestPayload);
+      if(f.dataset.requestFingerprint&&f.dataset.requestFingerprint!==fingerprint) resetCheckoutAttempt(f);
       const req=f.dataset.requestId||(crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2));
       f.dataset.requestId=req;
-      const r=await api('createOrder',{...requestPayload,requestId:req});
+      f.dataset.requestFingerprint=fingerprint;
+      let r;
+      try{
+        r=await api('createOrder',{...requestPayload,requestId:req});
+      }catch(createErr){
+        // Jika respons browser gagal setelah transaksi DB sebenarnya commit, pulihkan order
+        // berdasarkan requestId agar user tidak membuat order kedua karena false error.
+        await new Promise(resolve=>setTimeout(resolve,450));
+        try{
+          const recovered=await api('checkoutRequestStatus',{requestId:req});
+          if(recovered?.found&&recovered?.order){
+            r={order:recovered.order,paymentUrl:recovered.paymentUrl||'',paymentData:recovered.paymentData||null,recovered:true};
+          }else throw createErr;
+        }catch{throw createErr;}
+      }
       delete f.dataset.requestId;
+      delete f.dataset.requestFingerprint;
       state.orders=await api('orders'); state.user=await api('me'); setAccount();
       state.checkoutQty=1;state.appliedVoucher=null;if(state.cart?.productId===f.dataset.productId&&String(state.cart?.variantId||'')===String(f.dataset.variantId||'')){state.cart=null;saveCart();}
       const createdMode=r.order?.paymentMode||g('paymentMethod')||'';
