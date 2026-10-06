@@ -1,0 +1,14 @@
+UPLY DIGITAL V31.1 — PAYMENT GATEWAY HOTFIX
+
+1. Upload/deploy isi project ini ke Vercel.
+2. Environment BeliBayar tetap:
+   BELIBAYAR_BACKEND_URL=https://uplyapi.duckdns.org
+   BELIBAYAR_BACKEND_KEY=<sama dengan UPLY_BACKEND_KEY Windows>
+   BELIBAYAR_BACKEND_READY=true
+   UPLY_RELAY_KEY=<sama dengan UPLY_RELAY_KEY Windows>
+3. Redeploy Production.
+4. Buka /api/health. Target BeliBayar: configured=true, ready=true, enabled=true.
+5. Admin → Pembayaran & Toko sekarang mempunyai kartu ON/OFF gateway yang lebih jelas.
+6. Setelah auto-init pertama, BeliBayar tetap bisa dimatikan lagi dari Admin dan tidak akan otomatis hidup pada cold start berikutnya.
+
+Tidak perlu mengubah Windows backend bila V31 backend Windows yang sekarang sudah sehat dan webhook/relay sudah terkonfigurasi.
