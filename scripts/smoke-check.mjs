@@ -12,7 +12,7 @@ const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 for(const marker of ['/api/uply']){ if(!app.includes(marker)){ console.error('APP MARKER MISSING',marker); ok=false; } }
 const health=fs.readFileSync(new URL('../api/health.js',import.meta.url),'utf8');
 if(!health.includes("hosting:'vercel'")){ console.error('Health hosting marker missing'); ok=false; }
-if(!health.includes("version:'31.5'")){ console.error('V31.5 health version missing'); ok=false; }
+if(!health.includes("version:'31.6'")){ console.error('V31.6 health version missing'); ok=false; }
 
 const api=fs.readFileSync(new URL('../api/uply.js',import.meta.url),'utf8');
 for(const marker of ['saveVoucher','adjustBalance','setCustomerTier','validateVoucher','markNotificationsRead']){ if(!api.includes(marker)){console.error('API FEATURE MISSING',marker);ok=false;} }
@@ -66,4 +66,8 @@ if(!ok) process.exit(1);
 
 if(!belibayar.includes('api/belibayar/diagnostic')||!belibayar.includes('normalizeBelibayarData')){console.error('V31.5 BELIBAYAR DIAGNOSTIC/NORMALIZER MISSING');ok=false;}
 if(!gateways.includes('data.qrUrl')||!gateways.includes('data.qr_url')){console.error('V31.5 QRIS URL NORMALIZER MISSING');ok=false;}
-console.log('Smoke check OK — V31.5 BeliBayar provider diagnostic + QRIS normalization ready');
+for(const marker of ['getBelibayarChannels','virtual_account','api/payments/belibayar/create']){if(!belibayar.includes(marker)){console.error('V31.6 BELIBAYAR VA/CHANNEL FEATURE MISSING',marker);ok=false;}}
+for(const marker of ['belibayar-method-tabs','bb-va-payment','data-copy-payment','paymentSubmethod']){if(!app.includes(marker)){console.error('V31.6 QRIS EMBED/VA UI MISSING',marker);ok=false;}}
+if(!api.includes("getGatewayChannels('belibayar')")){console.error('V31.6 ACTIVE CHANNEL VALIDATION MISSING');ok=false;}
+if(!ok) process.exit(1);
+console.log('Smoke check OK — V31.6 BeliBayar QRIS embedded + active Virtual Account channels ready');
