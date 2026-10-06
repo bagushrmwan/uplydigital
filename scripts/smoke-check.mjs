@@ -1,8 +1,8 @@
 import fs from 'fs';
 const required=[
   'index.html','app.js','styles.css','market.css','vercel.json','package.json',
-  'api/uply.js','api/health.js','api/payment-webhook.js','api/product-image.js','api/product-media-image.js','api/qris-image.js',
-  'lib/db.js','lib/security.js','lib/midtrans.js','lib/payment-state.js','lib/business.js',
+  'api/uply.js','api/health.js','api/payment-webhook.js','api/belibayar-webhook.js','api/belibayar-relay.js','api/duitku-webhook.js','api/product-image.js','api/product-media-image.js','api/qris-image.js',
+  'lib/db.js','lib/security.js','lib/midtrans.js','lib/belibayar.js','lib/duitku.js','lib/gateways.js','lib/payment-state.js','lib/business.js',
   'assets/products/netflix.svg','assets/products/google-ai.svg','assets/products/youtube.svg',
   'assets/products/stars-6400.svg','assets/products/stars-12800.svg','assets/products/stars-19200.svg','assets/products/imei.svg'
 ];
@@ -12,7 +12,7 @@ const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 for(const marker of ['/api/uply']){ if(!app.includes(marker)){ console.error('APP MARKER MISSING',marker); ok=false; } }
 const health=fs.readFileSync(new URL('../api/health.js',import.meta.url),'utf8');
 if(!health.includes("hosting:'vercel'")){ console.error('Health hosting marker missing'); ok=false; }
-if(!health.includes("version:'29.0'")){ console.error('V29 health version missing'); ok=false; }
+if(!health.includes("version:'31.0'")){ console.error('V31 health version missing'); ok=false; }
 
 const api=fs.readFileSync(new URL('../api/uply.js',import.meta.url),'utf8');
 for(const marker of ['saveVoucher','adjustBalance','setCustomerTier','validateVoucher','markNotificationsRead']){ if(!api.includes(marker)){console.error('API FEATURE MISSING',marker);ok=false;} }
@@ -37,4 +37,12 @@ for(const marker of ['warranty_claims','customer_notifications','warranty_days',
 for(const marker of ['paymentMethodsPage','warrantyCenterPage','claimForm','adminClaimForm','data-admin-sync-payment','#pembayaran','#garansi']){if(!app.includes(marker)){console.error('V29 UI FEATURE MISSING',marker);ok=false;}}
 for(const marker of ["action==='claims'","action==='createWarrantyClaim'","action==='updateWarrantyClaim'","action==='adminSyncPayment'"]){if(!api.includes(marker)){console.error('V29 API FEATURE MISSING',marker);ok=false;}}
 if(!ok) process.exit(1);
-console.log('Smoke check OK — V29 warranty, timeline, profit, flash sale, notifications & payment monitor ready');
+for(const marker of ['belibayarPaymentEnabled','duitkuPaymentEnabled','createAutomaticPaymentForOrder','applyGatewayStatus']){if(!api.includes(marker)){console.error('V30 MULTI GATEWAY API MISSING',marker);ok=false;}}
+for(const marker of ['automaticPaymentIds','belibayarPaymentEnabled','duitkuPaymentEnabled','gatewayHealth']){if(!app.includes(marker)){console.error('V30 MULTI GATEWAY UI MISSING',marker);ok=false;}}
+if(!ok) process.exit(1);
+for(const marker of ['BELIBAYAR_BACKEND_URL','BELIBAYAR_BACKEND_KEY','BELIBAYAR_BACKEND_READY']){if(!fs.readFileSync(new URL('../lib/belibayar.js',import.meta.url),'utf8').includes(marker)){console.error('V31 WINDOWS BACKEND MARKER MISSING',marker);ok=false;}}
+const relay=fs.readFileSync(new URL('../api/belibayar-relay.js',import.meta.url),'utf8');
+for(const marker of ['UPLY_RELAY_KEY','applyBelibayarStatus','x-uply-relay-key']){if(!relay.includes(marker)){console.error('V31 RELAY MISSING',marker);ok=false;}}
+if(!app.includes('scheduleAutomaticPaymentPoll')){console.error('V31 AUTO PAYMENT POLLING MISSING');ok=false;}
+if(!ok) process.exit(1);
+console.log('Smoke check OK — V31 Windows BeliBayar backend relay + multi-payment gateway ready');
