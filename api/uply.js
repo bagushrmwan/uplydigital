@@ -1,7 +1,7 @@
 import { ensureSchema, q, pool, getSettings, audit } from '../lib/db.js';
 import { id, normalizeEmail, validEmail, hashPassword, verifyPassword, safeEqual, createSession, requireAuth, requireAdmin, destroySession, securityReady, credentialSecurityReady, encryptCredentialPayload, decryptCredentialPayload } from '../lib/security.js';
 import { paymentMode as configuredPaymentMode } from '../lib/midtrans.js';
-import { AUTO_GATEWAYS, isAutomaticGateway, gatewayReady, gatewayLabel, gatewayHealth, defaultGatewayMethod, createGatewayPayment, getGatewayStatus, expireGatewayPayment, normalizedCreatedPayment, normalizedStatus } from '../lib/gateways.js';
+import { AUTO_GATEWAYS, isAutomaticGateway, gatewayReady, gatewayLabel, gatewayHealth, probeGatewayConnectivity, defaultGatewayMethod, createGatewayPayment, getGatewayStatus, expireGatewayPayment, normalizedCreatedPayment, normalizedStatus } from '../lib/gateways.js';
 import { applyGatewayStatus, autoFulfillOrder } from '../lib/payment-state.js';
 import { sendEmail } from '../lib/email.js';
 import { syncMembership, notifyAdmin, notifyUser, refundOrderCredits, tierFromStats } from '../lib/business.js';
@@ -282,6 +282,10 @@ export default async function handler(req,res){
         if(!requested || !allowed.has(requested)) throw safeError('Pilih metode pembayaran yang tersedia.');
         if(requested==='manual'&&!activeBanks.some(b=>b.id===text(p.bankId,100))) throw safeError('Pilih rekening pembayaran yang aktif.');
         if(isAutomaticGateway(requested)&&!gatewayReady(requested)) throw safeError(`${gatewayLabel(requested)} belum siap. Periksa Environment Variables dan konfigurasi merchant.`,500);
+        if(requested==='belibayar'){
+          const probe=await probeGatewayConnectivity('belibayar');
+          if(!probe.ok) throw safeError(`BeliBayar belum dapat digunakan: ${probe.message}`,503);
+        }
       }
       data={ready:true,productId:prod.id,variantId:variant?.id||'',quantity:qty,paymentMethod:due===0?'balance':requested};
     }
