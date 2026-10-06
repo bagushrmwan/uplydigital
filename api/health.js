@@ -1,13 +1,14 @@
 import { ensureSchema,q,getSettings } from '../lib/db.js';
 import { paymentMode } from '../lib/midtrans.js';
 import { gatewayHealth, probeGatewayConnectivity, getGatewayChannels } from '../lib/gateways.js';
-import { emailHealth } from '../lib/email.js';
+import { emailHealth, probeEmailBackend } from '../lib/email.js';
 function bool(v){return v===true||String(v).toLowerCase()==='true';}
 export default async function handler(req,res){
   try{
     await ensureSchema(); await q('SELECT 1');
     const [settings,banks]=await Promise.all([getSettings(),q('SELECT COUNT(*)::int AS n FROM banks WHERE active=TRUE')]);
     const mode=paymentMode(),health=gatewayHealth();
+    const emailProbe=await probeEmailBackend();
     const belibayarProbe=health.belibayar.configured&&health.belibayar.ready
       ? await probeGatewayConnectivity('belibayar')
       : {ok:false,status:0,auth:false,message:'BeliBayar belum dikonfigurasi/ready.'};
@@ -28,6 +29,6 @@ export default async function handler(req,res){
     const gallerySystemReady=Number(media.rows[0]?.n||0)===1;
     const growth=await q(`SELECT COUNT(*)::int AS n FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('warranty_claims','customer_notifications')`);
     const growthSuiteReady=Number(growth.rows[0]?.n||0)===2;
-    return res.status(200).json({ok:payment.ready&&checkoutSchemaReady&&gallerySystemReady&&growthSuiteReady,backend:'connected',database:'connected',hosting:'vercel',version:'32.0',checkoutSchemaReady,variantSystemReady:Number(variants.rows[0]?.n||0)===1,gallerySystemReady,growthSuiteReady,email:emailHealth(),payment});
+    return res.status(200).json({ok:payment.ready&&checkoutSchemaReady&&gallerySystemReady&&growthSuiteReady,backend:'connected',database:'connected',hosting:'vercel',version:'32.1',checkoutSchemaReady,variantSystemReady:Number(variants.rows[0]?.n||0)===1,gallerySystemReady,growthSuiteReady,email:{...emailHealth(),runtimeConnected:emailProbe.ok,runtimeStatus:emailProbe.status,staticEgress:emailProbe.staticEgress===true,runtimeMessage:emailProbe.message||''},payment});
   }catch(e){return res.status(500).json({ok:false,error:String(e.message||e)})}
 }
