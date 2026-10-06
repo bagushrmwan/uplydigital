@@ -1,7 +1,8 @@
 import { ensureSchema, q, pool, getSettings, audit } from '../lib/db.js';
 import { id, normalizeEmail, validEmail, hashPassword, verifyPassword, safeEqual, createSession, requireAuth, requireAdmin, destroySession, securityReady, credentialSecurityReady, encryptCredentialPayload, decryptCredentialPayload } from '../lib/security.js';
-import { createPayment, getPaymentStatus, expirePayment, midtransEnabled, paymentMode as configuredPaymentMode } from '../lib/midtrans.js';
-import { applyMidtransStatus, autoFulfillOrder } from '../lib/payment-state.js';
+import { paymentMode as configuredPaymentMode } from '../lib/midtrans.js';
+import { AUTO_GATEWAYS, isAutomaticGateway, gatewayReady, gatewayLabel, gatewayHealth, defaultGatewayMethod, createGatewayPayment, getGatewayStatus, expireGatewayPayment, normalizedCreatedPayment, normalizedStatus } from '../lib/gateways.js';
+import { applyGatewayStatus, autoFulfillOrder } from '../lib/payment-state.js';
 import { sendEmail } from '../lib/email.js';
 import { syncMembership, notifyAdmin, notifyUser, refundOrderCredits, tierFromStats } from '../lib/business.js';
 
@@ -44,7 +45,7 @@ function publicProduct(r,availableInventory,variants=[],gallery=[]){
 function publicOrder(o,admin=false){
   const gp=o.gateway_payload&&typeof o.gateway_payload==='object'?o.gateway_payload:{};
   const va=Array.isArray(gp.va_numbers)&&gp.va_numbers[0]?gp.va_numbers[0]:{};
-  const paymentData={method:o.gateway_payment_method||gp.payment_type||'',channel:o.gateway_payment_channel||gp.bank||va.bank||'',transactionId:o.gateway_transaction_id||gp.transaction_id||'',snapToken:gp.token||'',qrUrl:'',qrContent:'',vaNumber:gp.permata_va_number||va.va_number||'',paymentCode:gp.payment_code||'',billKey:gp.bill_key||'',billerCode:gp.biller_code||'',paymentUrl:o.payment_url||gp.redirect_url||gp.finish_redirect_url||'',expiredAt:null,fee:0,feeBearer:'',amount:Number(gp.gross_amount||o.total||0)};
+  const paymentData={method:o.gateway_payment_method||gp.payment_type||gp.payment_method||gp.paymentMethod||'',channel:o.gateway_payment_channel||gp.payment_channel||gp.channel||gp.bank||va.bank||gp.paymentMethod||'',transactionId:o.gateway_transaction_id||gp.transaction_id||gp.reference||'',snapToken:gp.token||'',qrUrl:gp.qr_url||gp.qrUrl||'',qrContent:gp.qr_content||gp.qrString||'',vaNumber:gp.va_number||gp.vaNumber||gp.permata_va_number||va.va_number||'',paymentCode:gp.payment_code||'',billKey:gp.bill_key||'',billerCode:gp.biller_code||'',paymentUrl:o.payment_url||gp.payment_url||gp.paymentUrl||gp.appUrl||gp.redirect_url||gp.finish_redirect_url||'',expiredAt:gp.expired_at||gp.expiredAt||null,fee:Number(gp.fee||0),feeBearer:gp.fee_bearer||'',amount:Number(gp.gross_amount||gp.amount||o.total||0),provider:o.payment_mode||''};
   return {id:o.id,userId:admin?o.user_id:undefined,email:o.email,name:o.name,phone:o.phone,channel:o.channel,productId:o.product_id,productName:o.product_name,productThumbnail:o.product_thumbnail||'',variantId:o.variant_id||'',variantName:o.variant_name||'',variantSubtitle:o.variant_subtitle||'',duration:o.duration,quantity:Number(o.quantity),price:Number(o.price),subtotal:Number(o.subtotal||Number(o.price)*Number(o.quantity)),discount:Number(o.discount||0),voucherCode:o.voucher_code||'',balanceUsed:Number(o.balance_used||0),total:Number(o.total),costPrice:Number(o.cost_price||0),warrantyDays:Number(o.warranty_days||0),warrantyUntil:o.warranty_until||null,saleApplied:!!o.sale_applied,status:o.status,paymentMode:o.payment_mode,gatewayStatus:o.gateway_status,paymentUrl:o.payment_url, paymentData,createdAt:o.created_at,expiresAt:o.expires_at,updatedAt:o.updated_at,paymentSubmittedAt:o.payment_submitted_at,paymentVerifiedAt:o.payment_verified_at,processingAt:o.processing_at,completedAt:o.completed_at,hasProof:!!o.proof_name,proofName:o.proof_name,delivery:o.delivery,note:o.note,hasCredentials:admin?!!o.credentials_enc:undefined,credentialsStatus:admin?(o.credentials_status||''):undefined,credentialsViewedAt:admin?o.credentials_viewed_at:undefined,bank:o.bank_id?{id:o.bank_id,name:o.bank_name,number:o.bank_number,holder:o.bank_holder}:null};
 }
 function originHeaders(req){
@@ -95,7 +96,7 @@ async function catalog(){
   const products=pr.rows.map(p=>publicProduct({...p,best_seller:best.has(p.id)},invProduct[p.id]||0,variantsByProduct[p.id]||[],mediaByProduct[p.id]||[]));
   const methods=availablePaymentMethods(s,br.rows);
   const cfg=configuredPaymentMode();
-  return {products,banks:br.rows,paymentMethods:methods,settings:{storeName:s.storeName||'Uply Digital',whatsapp:s.whatsapp||'',hours:s.hours||'',storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,notice:s.notice||'',promoBanner:s.promoBanner||'',paymentMode:cfg,paymentReady:methods.some(m=>m.id!=='balance'),paymentProvider:methods.map(m=>m.label).join(' · '),manualPaymentEnabled:bool(s.manualPaymentEnabled),midtransPaymentEnabled:bool(s.midtransPaymentEnabled),balancePaymentEnabled:bool(s.balancePaymentEnabled),qrisManualReady:!!s.qrisImageData,qrisName:s.qrisName||'QRIS Manual'}};
+  return {products,banks:br.rows,paymentMethods:methods,settings:{storeName:s.storeName||'Uply Digital',whatsapp:s.whatsapp||'',hours:s.hours||'',storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,notice:s.notice||'',promoBanner:s.promoBanner||'',paymentMode:cfg,paymentReady:methods.some(m=>m.id!=='balance'),paymentProvider:methods.map(m=>m.label).join(' · '),manualPaymentEnabled:bool(s.manualPaymentEnabled),midtransPaymentEnabled:bool(s.midtransPaymentEnabled),belibayarPaymentEnabled:bool(s.belibayarPaymentEnabled),duitkuPaymentEnabled:bool(s.duitkuPaymentEnabled),balancePaymentEnabled:bool(s.balancePaymentEnabled),qrisManualReady:!!s.qrisImageData,qrisName:s.qrisName||'QRIS Manual'}};
 }
 async function getUserById(userId){ const {rows}=await q(`SELECT u.id,u.email,u.name,u.phone,u.balance,u.membership_tier,u.membership_manual,u.created_at,COUNT(o.id) FILTER (WHERE o.status='completed')::int AS completed_count,COALESCE(SUM(CASE WHEN o.status='completed' THEN COALESCE(NULLIF(o.subtotal,0),o.price*o.quantity)-o.discount ELSE 0 END),0)::bigint AS spent FROM users u LEFT JOIN orders o ON o.user_id=u.id WHERE u.id=$1 GROUP BY u.id LIMIT 1`,[userId]); const u=rows[0]; if(!u)return u; const settings=await getSettings(); const autoEnabled=bool(settings.autoRoleEnabled); const tier=(u.membership_manual||!autoEnabled)?(u.membership_tier||'customer'):tierFromStats(u.completed_count,u.spent); return {...u,balance:Number(u.balance||0),membershipTier:tier,membershipManual:!!u.membership_manual,completedCount:Number(u.completed_count||0),spent:Number(u.spent||0)}; }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -144,33 +145,38 @@ async function voucherQuote({code,userId,product,qty,client=null}){
 function availablePaymentMethods(settings,banks){
   const methods=[]; const cfg=configuredPaymentMode();
   if(bool(settings.balancePaymentEnabled)) methods.push({id:'balance',label:'Saldo Uply',type:'balance'});
-  if(bool(settings.midtransPaymentEnabled) && midtransEnabled()) methods.push({id:'midtrans',label:'Midtrans Otomatis',type:'gateway'});
+  if(bool(settings.midtransPaymentEnabled) && gatewayReady('midtrans')) methods.push({id:'midtrans',label:'Midtrans',type:'gateway'});
+  if(bool(settings.belibayarPaymentEnabled) && gatewayReady('belibayar')) methods.push({id:'belibayar',label:'BeliBayar',type:'gateway'});
+  if(bool(settings.duitkuPaymentEnabled) && gatewayReady('duitku')) methods.push({id:'duitku',label:'Duitku',type:'gateway'});
   if(bool(settings.manualPaymentEnabled) && banks.length) methods.push({id:'manual',label:'Transfer Bank Manual',type:'manual'});
   if(bool(settings.manualPaymentEnabled) && settings.qrisImageData) methods.push({id:'qris_manual',label:settings.qrisName||'QRIS Manual',type:'manual_qris'});
   if(!methods.some(m=>m.id!=='balance')){
-    if(cfg==='midtrans'&&midtransEnabled()) methods.push({id:'midtrans',label:'Midtrans Otomatis',type:'gateway'});
-    else if(banks.length) methods.push({id:'manual',label:'Transfer Bank Manual',type:'manual'});
+    if(cfg==='midtrans'&&gatewayReady('midtrans')) methods.push({id:'midtrans',label:'Midtrans',type:'gateway'});
+    else if(banks.length&&bool(settings.manualPaymentEnabled)) methods.push({id:'manual',label:'Transfer Bank Manual',type:'manual'});
   }
   return methods;
 }
 
-async function createMidtransForOrder(order){
-  if(!midtransEnabled()) throw safeError('Pembayaran Midtrans belum siap. Periksa PAYMENT_MODE=midtrans, MIDTRANS_SERVER_KEY, MIDTRANS_IS_PRODUCTION, dan SITE_URL.',500);
+async function createAutomaticPaymentForOrder(order,provider){
+  provider=String(provider||order?.payment_mode||'').toLowerCase();
+  if(!isAutomaticGateway(provider)||!gatewayReady(provider)) throw safeError(`${gatewayLabel(provider)} belum siap. Periksa Environment Variables, status merchant, callback, dan konfigurasi gateway.`,500);
   const currentAttempt=Math.max(0,Number(order.gateway_attempt)||0);
   const nextAttempt=currentAttempt+1;
-  const gatewayOrderId=`${order.id}-P${nextAttempt}`.slice(0,50);
-  await q(`UPDATE orders SET payment_url='',gateway_status='creating',gateway_order_id=$2,gateway_payment_method='snap',gateway_payment_channel='MIDTRANS',gateway_attempt=$3,updated_at=NOW() WHERE id=$1`,[order.id,gatewayOrderId,nextAttempt]);
-  await q(`INSERT INTO payment_attempts(gateway_order_id,order_id,provider,attempt_no,status,payment_url,payload) VALUES($1,$2,'midtrans',$3,'creating','','{}'::jsonb) ON CONFLICT(gateway_order_id) DO UPDATE SET status='creating',updated_at=NOW()`,[gatewayOrderId,order.id,nextAttempt]);
+  const prefix={midtrans:'M',belibayar:'B',duitku:'D'}[provider]||'P';
+  const gatewayOrderId=`${order.id}-${prefix}${nextAttempt}`.slice(0,50);
+  const defaults=defaultGatewayMethod(provider);
+  await q(`UPDATE orders SET payment_url='',gateway_status='creating',gateway_order_id=$2,gateway_payment_method=$3,gateway_payment_channel=$4,gateway_attempt=$5,updated_at=NOW() WHERE id=$1`,[order.id,gatewayOrderId,defaults.method,defaults.channel,nextAttempt]);
+  await q(`INSERT INTO payment_attempts(gateway_order_id,order_id,provider,attempt_no,status,payment_url,payload) VALUES($1,$2,$3,$4,'creating','','{}'::jsonb) ON CONFLICT(gateway_order_id) DO UPDATE SET provider=EXCLUDED.provider,status='creating',updated_at=NOW()`,[gatewayOrderId,order.id,provider,nextAttempt]);
   const fresh=(await q('SELECT * FROM orders WHERE id=$1',[order.id])).rows[0];
   try{
-    const payment=await createPayment(fresh,gatewayOrderId);
-    const paymentUrl=String(payment.redirect_url||'');
-    await q(`UPDATE orders SET payment_url=$2,gateway_status='pending',gateway_transaction_id='',gateway_order_id=$3,gateway_payment_method='snap',gateway_payment_channel='MIDTRANS',gateway_payload=$4::jsonb,updated_at=NOW() WHERE id=$1`,[order.id,paymentUrl,gatewayOrderId,JSON.stringify(payment)]);
-    await q(`UPDATE payment_attempts SET status='pending',payment_url=$2,payload=$3::jsonb,updated_at=NOW() WHERE gateway_order_id=$1`,[gatewayOrderId,paymentUrl,JSON.stringify(payment)]);
-    return {paymentUrl,paymentData:payment,gatewayOrderId};
+    const payment=await createGatewayPayment(provider,fresh,gatewayOrderId);
+    const n=normalizedCreatedPayment(provider,payment);
+    await q(`UPDATE orders SET payment_url=$2,gateway_status=$3,gateway_transaction_id=$4,gateway_order_id=$5,gateway_payment_method=CASE WHEN $6<>'' THEN $6 ELSE gateway_payment_method END,gateway_payment_channel=CASE WHEN $7<>'' THEN $7 ELSE gateway_payment_channel END,gateway_payload=$8::jsonb,updated_at=NOW() WHERE id=$1`,[order.id,n.paymentUrl,n.status||'pending',n.transactionId,gatewayOrderId,n.method,n.channel,JSON.stringify(payment)]);
+    await q(`UPDATE payment_attempts SET status=$2,transaction_id=$3,payment_url=$4,payload=$5::jsonb,updated_at=NOW() WHERE gateway_order_id=$1`,[gatewayOrderId,n.status||'pending',n.transactionId,n.paymentUrl,JSON.stringify(payment)]);
+    return {paymentUrl:n.paymentUrl,paymentData:payment,gatewayOrderId};
   }catch(e){
     await q(`UPDATE orders SET gateway_status='error',updated_at=NOW() WHERE id=$1`,[order.id]);
-    await q(`UPDATE payment_attempts SET status='error',payload=$2::jsonb,updated_at=NOW() WHERE gateway_order_id=$1`,[gatewayOrderId,JSON.stringify({error:e?.message||'Midtrans error'})]);
+    await q(`UPDATE payment_attempts SET status='error',payload=$2::jsonb,updated_at=NOW() WHERE gateway_order_id=$1`,[gatewayOrderId,JSON.stringify({error:e?.message||`${gatewayLabel(provider)} error`})]);
     throw e;
   }
 }
@@ -275,7 +281,7 @@ export default async function handler(req,res){
       if(due>0){
         if(!requested || !allowed.has(requested)) throw safeError('Pilih metode pembayaran yang tersedia.');
         if(requested==='manual'&&!activeBanks.some(b=>b.id===text(p.bankId,100))) throw safeError('Pilih rekening pembayaran yang aktif.');
-        if(requested==='midtrans'&&!midtransEnabled()) throw safeError('Midtrans belum siap. Periksa Environment Variables Vercel.',500);
+        if(isAutomaticGateway(requested)&&!gatewayReady(requested)) throw safeError(`${gatewayLabel(requested)} belum siap. Periksa Environment Variables dan konfigurasi merchant.`,500);
       }
       data={ready:true,productId:prod.id,variantId:variant?.id||'',quantity:qty,paymentMethod:due===0?'balance':requested};
     }
@@ -315,7 +321,7 @@ export default async function handler(req,res){
           const methods=availablePaymentMethods(settings,activeBanks); const allowed=new Set(methods.map(x=>x.id));
           let requested=text(p.paymentMethod,30); if(!requested||requested==='balance') requested=methods.find(x=>x.id!=='balance')?.id||'';
           if(due===0) mode='balance';
-          else if(requested==='midtrans'&&allowed.has('midtrans')) mode='midtrans';
+          else if(isAutomaticGateway(requested)&&allowed.has(requested)) mode=requested;
           else if(requested==='qris_manual'&&allowed.has('qris_manual')) mode='qris_manual';
           else if(requested==='manual'&&allowed.has('manual')) mode='manual';
           else throw safeError('Metode pembayaran yang dipilih sedang tidak tersedia.');
@@ -324,7 +330,7 @@ export default async function handler(req,res){
           if(mode==='manual'){
             const chosen=activeBanks.find(b=>b.id===text(p.bankId,100)); if(!chosen) throw safeError('Pilih rekening pembayaran yang aktif.'); bank=chosen;
           }
-          if(mode==='midtrans'&&!midtransEnabled()) throw safeError('Midtrans belum siap. Periksa konfigurasi Vercel dan deploy ulang.',500);
+          if(isAutomaticGateway(mode)&&!gatewayReady(mode)) throw safeError(`${gatewayLabel(mode)} belum siap. Periksa konfigurasi Vercel dan deploy ulang.`,500);
 
           const orderId=`UPL-${new Date().toISOString().slice(2,10).replace(/-/g,'')}-${Math.random().toString(36).slice(2,10).toUpperCase()}`;
           const hours=Math.max(1,Math.min(72,Number(settings.paymentHours)||24)), customerNote=text(p.customerNote,800);
@@ -347,7 +353,7 @@ export default async function handler(req,res){
           }
           if(voucher.code) await client.query('INSERT INTO voucher_usages(voucher_code,user_id,order_id,discount) VALUES($1,$2,$3,$4)',[voucher.code,u.id,orderId,voucher.discount]);
 
-          const selectedPayMethod=mode==='midtrans'?'snap':mode; const selectedPayChannel=mode==='midtrans'?'MIDTRANS':mode==='qris_manual'?'QRIS_MANUAL':'';
+          const gatewayDefaults=isAutomaticGateway(mode)?defaultGatewayMethod(mode):{method:mode,channel:mode==='qris_manual'?'QRIS_MANUAL':''}; const selectedPayMethod=gatewayDefaults.method; const selectedPayChannel=gatewayDefaults.channel;
           const publicThumb=prod.thumbnail_data?`/api/product-image?id=${encodeURIComponent(prod.id)}&v=${encodeURIComponent(new Date(prod.updated_at||Date.now()).getTime())}`:(prod.thumbnail_url||'');
           const initialStatus=mode==='balance'?'processing':'pending_payment'; const verified=mode==='balance';
           const costSnapshot=Math.max(0,Number((variant||prod).cost_price||0)); const warrantySnapshot=warrantyDays(prod,variant); const saleApplied=!!sourcePrice.saleActive;
@@ -357,9 +363,9 @@ export default async function handler(req,res){
         }catch(e){await client.query('ROLLBACK');throw e;}finally{await client.release();}
 
         let paymentUrl='',paymentData=null,paymentError='';
-        if(mode==='midtrans'){
-          try{const created=await createMidtransForOrder(order);paymentUrl=created.paymentUrl;paymentData=created.paymentData;order=(await q('SELECT * FROM orders WHERE id=$1',[order.id])).rows[0];}
-          catch(e){paymentError=e?.safe?e.message:'Midtrans belum dapat membuat transaksi.';await q(`UPDATE orders SET gateway_status='error',note=CASE WHEN note='' THEN $2 ELSE note || E'\n' || $2 END,updated_at=NOW() WHERE id=$1`,[order.id,`Payment gateway Midtrans: ${paymentError}`]);}
+        if(isAutomaticGateway(mode)){
+          try{const created=await createAutomaticPaymentForOrder(order,mode);paymentUrl=created.paymentUrl;paymentData=created.paymentData;order=(await q('SELECT * FROM orders WHERE id=$1',[order.id])).rows[0];}
+          catch(e){paymentError=e?.safe?e.message:`${gatewayLabel(mode)} belum dapat membuat transaksi.`;await q(`UPDATE orders SET gateway_status='error',note=CASE WHEN note='' THEN $2 ELSE note || E'\n' || $2 END,updated_at=NOW() WHERE id=$1`,[order.id,`Payment gateway ${gatewayLabel(mode)}: ${paymentError}`]);}
         }
         if(mode==='balance') await autoFulfillOrder(order.id,'balance');
         await audit(u.email,'order_created',order.id,{productId:prod.id,variantId:variant?.id||'',subtotal:Number(order.subtotal),discount:Number(order.discount),balanceUsed:Number(order.balance_used),total:Number(order.total),mode,voucher:voucher.code});
@@ -371,22 +377,24 @@ export default async function handler(req,res){
     }
     else if(action==='retryPayment'){
       const u=await requireAuth(req);const orderId=text(p.orderId,80);const {rows}=await q('SELECT * FROM orders WHERE id=$1 AND user_id=$2 LIMIT 1',[orderId,u.id]);const o=rows[0];
-      if(!o||o.payment_mode!=='midtrans'||o.status!=='pending_payment') throw safeError('Pembayaran Midtrans tidak dapat dibuat ulang.');
-      if(o.payment_url && ['pending','creating'].includes(String(o.gateway_status||'').toLowerCase())) data={paymentUrl:o.payment_url,paymentData:o.gateway_payload||{},reused:true};
+      if(!o||!isAutomaticGateway(o.payment_mode)||o.status!=='pending_payment') throw safeError('Pembayaran otomatis tidak dapat dibuat ulang.');
+      if(!gatewayReady(o.payment_mode)) throw safeError(`${gatewayLabel(o.payment_mode)} belum siap. Periksa konfigurasi gateway.`,500);
+      if((o.payment_url || Object.keys(o.gateway_payload||{}).length>0) && ['pending','creating'].includes(String(o.gateway_status||'').toLowerCase())) data={paymentUrl:o.payment_url,paymentData:o.gateway_payload||{},reused:true};
       else{
-        if(o.gateway_order_id) await expirePayment(o.gateway_order_id);
-        const created=await createMidtransForOrder(o);data={paymentUrl:created.paymentUrl,paymentData:created.paymentData,reused:false};
+        if(o.gateway_order_id) await expireGatewayPayment(o.payment_mode,o.gateway_order_id);
+        const created=await createAutomaticPaymentForOrder(o,o.payment_mode);data={paymentUrl:created.paymentUrl,paymentData:created.paymentData,reused:false};
       }
     }
     else if(action==='syncPaymentStatus'){
       const u=await requireAuth(req);const orderId=text(p.orderId,80);const {rows}=await q('SELECT * FROM orders WHERE id=$1 AND user_id=$2 LIMIT 1',[orderId,u.id]);const o=rows[0];
-      if(!o||o.payment_mode!=='midtrans') throw safeError('Pesanan Midtrans tidak ditemukan.');
+      if(!o||!isAutomaticGateway(o.payment_mode)) throw safeError('Pesanan gateway otomatis tidak ditemukan.');
       if(o.status==='completed'){data={order:publicOrder(o),state:'success'};}
-      else if(!o.gateway_order_id){throw safeError('Transaksi Midtrans belum dibuat. Klik Buat pembayaran terlebih dahulu.');}
+      else if(!o.gateway_order_id){throw safeError(`Transaksi ${gatewayLabel(o.payment_mode)} belum dibuat. Klik Buat pembayaran terlebih dahulu.`);}
       else{
-        const statusBody=await getPaymentStatus(o.gateway_order_id);
-        const result=await applyMidtransStatus(statusBody,'midtrans-sync');
-        await q(`UPDATE orders SET gateway_payload=$2::jsonb,gateway_status=$3,gateway_transaction_id=CASE WHEN $4<>'' THEN $4 ELSE gateway_transaction_id END,gateway_payment_method=CASE WHEN $5<>'' THEN $5 ELSE gateway_payment_method END,updated_at=NOW() WHERE id=$1`,[orderId,JSON.stringify(statusBody),String(statusBody.transaction_status||''),String(statusBody.transaction_id||''),String(statusBody.payment_type||'')]);
+        const statusBody=await getGatewayStatus(o.payment_mode,o.gateway_order_id);
+        const result=await applyGatewayStatus(o.payment_mode,statusBody,`${o.payment_mode}-sync`);
+        const n=normalizedStatus(o.payment_mode,statusBody);
+        await q(`UPDATE orders SET gateway_payload=$2::jsonb,gateway_status=$3,gateway_transaction_id=CASE WHEN $4<>'' THEN $4 ELSE gateway_transaction_id END,gateway_payment_method=CASE WHEN $5<>'' THEN $5 ELSE gateway_payment_method END,gateway_payment_channel=CASE WHEN $6<>'' THEN $6 ELSE gateway_payment_channel END,updated_at=NOW() WHERE id=$1`,[orderId,JSON.stringify(statusBody),n.status,n.transactionId,n.method,n.channel]);
         data={order:publicOrder((await q('SELECT * FROM orders WHERE id=$1',[orderId])).rows[0]),state:result.state};
       }
     }
@@ -398,7 +406,7 @@ export default async function handler(req,res){
     }
     else if(action==='cancelOrder'){
       const u=await requireAuth(req); const orderId=text(p.orderId,80); const {rows}=await q('SELECT * FROM orders WHERE id=$1 AND user_id=$2 LIMIT 1',[orderId,u.id]); const o=rows[0]; if(!o||o.status!=='pending_payment') throw safeError('Pesanan ini tidak dapat dibatalkan sendiri.');
-      if(o.payment_mode==='midtrans'&&o.gateway_order_id) await expirePayment(o.gateway_order_id);
+      if(isAutomaticGateway(o.payment_mode)&&o.gateway_order_id) await expireGatewayPayment(o.payment_mode,o.gateway_order_id);
       await q(`UPDATE orders SET status='cancelled',note='Dibatalkan pelanggan sebelum pembayaran terverifikasi.',credentials_enc='',credentials_status=CASE WHEN credentials_enc<>'' THEN 'purged' ELSE credentials_status END,updated_at=NOW() WHERE id=$1`,[orderId]);
       if(o.stock_reserved){if(o.variant_id)await q('UPDATE product_variants SET stock=stock+$2,updated_at=NOW() WHERE id=$1 AND stock<>-1',[o.variant_id,o.quantity]);else await q('UPDATE products SET stock=stock+$2,updated_at=NOW() WHERE id=$1 AND stock<>-1',[o.product_id,o.quantity]);await q('UPDATE orders SET stock_reserved=FALSE WHERE id=$1',[orderId]);}
       await refundOrderCredits(orderId,u.email,'Pesanan dibatalkan pelanggan.'); await audit(u.email,'order_cancelled',orderId,{}); data=true;
@@ -445,7 +453,7 @@ export default async function handler(req,res){
         paymentEvents:paymentEvents.rows.map(x=>({id:x.id,eventKey:x.event_key,orderId:x.order_id,error:x.error||'',processedAt:x.processed_at,createdAt:x.created_at})),
         analytics:{daily:daily.rows.map(r=>({...r,orders:Number(r.orders),revenue:Number(r.revenue)})),topProducts:topProducts.rows.map(r=>({...r,completed:Number(r.completed),units:Number(r.units),revenue:Number(r.revenue)})),paymentMix:paymentMix.rows.map(r=>({...r,orders:Number(r.orders),revenue:Number(r.revenue)})),profit:orders.rows.filter(o=>o.status==='completed').reduce((n,o)=>n+(Number(o.subtotal||Number(o.price)*Number(o.quantity))-Number(o.discount||0)-Number(o.cost_price||0)*Number(o.quantity)),0)},
         audit:aud.rows,
-        settings:{...s,qrisImageData:undefined,qrisImageMime:undefined,storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,paymentMode:configuredPaymentMode(),paymentReady:methods.some(m=>m.id!=='balance'),paymentMethods:methods,manualPaymentEnabled:bool(s.manualPaymentEnabled),midtransPaymentEnabled:bool(s.midtransPaymentEnabled),balancePaymentEnabled:bool(s.balancePaymentEnabled),autoRoleEnabled:bool(s.autoRoleEnabled),qrisManualReady:!!s.qrisImageData,qrisName:s.qrisName||'QRIS Manual'},
+        settings:{...s,qrisImageData:undefined,qrisImageMime:undefined,storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,paymentMode:configuredPaymentMode(),paymentReady:methods.some(m=>m.id!=='balance'),paymentMethods:methods,gatewayHealth:gatewayHealth(),manualPaymentEnabled:bool(s.manualPaymentEnabled),midtransPaymentEnabled:bool(s.midtransPaymentEnabled),belibayarPaymentEnabled:bool(s.belibayarPaymentEnabled),duitkuPaymentEnabled:bool(s.duitkuPaymentEnabled),balancePaymentEnabled:bool(s.balancePaymentEnabled),autoRoleEnabled:bool(s.autoRoleEnabled),qrisManualReady:!!s.qrisImageData,qrisName:s.qrisName||'QRIS Manual'},
         admin:{email:a.email}
       };
     }
@@ -571,14 +579,14 @@ export default async function handler(req,res){
       const vals={
         storeName:text(x.storeName,60)||'Uply Digital',whatsapp:phone(x.whatsapp,false),hours:text(x.hours,120),
         paymentHours:String(Math.max(1,Math.min(72,Number(x.paymentHours)||24))),notice:text(x.notice,250),promoBanner:text(x.promoBanner,180),
-        storeOpen:String(bool(x.storeOpen)),manualPaymentEnabled:String(bool(x.manualPaymentEnabled)),midtransPaymentEnabled:String(bool(x.midtransPaymentEnabled)),
+        storeOpen:String(bool(x.storeOpen)),manualPaymentEnabled:String(bool(x.manualPaymentEnabled)),midtransPaymentEnabled:String(bool(x.midtransPaymentEnabled)),belibayarPaymentEnabled:String(bool(x.belibayarPaymentEnabled)),duitkuPaymentEnabled:String(bool(x.duitkuPaymentEnabled)),
         balancePaymentEnabled:String(bool(x.balancePaymentEnabled)),autoRoleEnabled:String(bool(x.autoRoleEnabled)),qrisName:text(x.qrisName,80)||'QRIS Manual'
       };
       const upload=x.qrisUpload&&typeof x.qrisUpload==='object'?x.qrisUpload:null;
       if(upload){const mime=text(upload.mime,80),base64=String(upload.base64||'');if(!['image/jpeg','image/png','image/webp'].includes(mime)) throw safeError('QRIS harus JPG, PNG, atau WebP.');if(base64.length>1800000) throw safeError('Ukuran QRIS maksimal sekitar 1,3 MB.');if(!/^[A-Za-z0-9+/=]+$/.test(base64)) throw safeError('Data QRIS tidak valid.');vals.qrisImageMime=mime;vals.qrisImageData=base64;}
       if(bool(x.clearQris)){vals.qrisImageMime='';vals.qrisImageData='';}
       for(const [k,v] of Object.entries(vals)) await q(`INSERT INTO settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`,[k,v]);
-      await audit(a.email,'settings_saved','',{payment:{manual:bool(x.manualPaymentEnabled),midtrans:bool(x.midtransPaymentEnabled),balance:bool(x.balancePaymentEnabled)},qrisUpload:!!upload}); data=true;
+      await audit(a.email,'settings_saved','',{payment:{manual:bool(x.manualPaymentEnabled),midtrans:bool(x.midtransPaymentEnabled),belibayar:bool(x.belibayarPaymentEnabled),duitku:bool(x.duitkuPaymentEnabled),balance:bool(x.balancePaymentEnabled)},qrisUpload:!!upload}); data=true;
     }
     else if(action==='inventoryAdd'){
       const a=await requireAdmin(req);
@@ -655,8 +663,8 @@ export default async function handler(req,res){
       const a=await requireAdmin(req); const claimId=text(p.claimId,100); const {rows}=await q('SELECT screenshot_name,screenshot_mime,screenshot_data FROM warranty_claims WHERE id=$1 LIMIT 1',[claimId]); const c=rows[0]; if(!c||!c.screenshot_data) throw safeError('Screenshot klaim tidak tersedia.'); await audit(a.email,'warranty_screenshot_viewed',claimId,{}); data={name:c.screenshot_name,mime:c.screenshot_mime,base64:c.screenshot_data};
     }
     else if(action==='adminSyncPayment'){
-      const a=await requireAdmin(req); const orderId=text(p.orderId,80); const {rows}=await q('SELECT * FROM orders WHERE id=$1 LIMIT 1',[orderId]); const o=rows[0]; if(!o) throw safeError('Pesanan tidak ditemukan.'); if(o.payment_mode!=='midtrans'||!o.gateway_order_id) throw safeError('Order ini tidak memiliki transaksi Midtrans aktif.');
-      const statusBody=await getPaymentStatus(o.gateway_order_id); const result=await applyMidtransStatus(statusBody,'admin-midtrans-sync'); await audit(a.email,'admin_payment_synced',orderId,{gatewayOrderId:o.gateway_order_id,state:result.state}); data={state:result.state,order:publicOrder((await q('SELECT * FROM orders WHERE id=$1',[orderId])).rows[0],true)};
+      const a=await requireAdmin(req); const orderId=text(p.orderId,80); const {rows}=await q('SELECT * FROM orders WHERE id=$1 LIMIT 1',[orderId]); const o=rows[0]; if(!o) throw safeError('Pesanan tidak ditemukan.'); if(!isAutomaticGateway(o.payment_mode)||!o.gateway_order_id) throw safeError('Order ini tidak memiliki transaksi gateway otomatis aktif.');
+      const statusBody=await getGatewayStatus(o.payment_mode,o.gateway_order_id); const result=await applyGatewayStatus(o.payment_mode,statusBody,`admin-${o.payment_mode}-sync`); const n=normalizedStatus(o.payment_mode,statusBody); await q(`UPDATE orders SET gateway_payload=$2::jsonb,gateway_status=$3,gateway_transaction_id=CASE WHEN $4<>'' THEN $4 ELSE gateway_transaction_id END,gateway_payment_method=CASE WHEN $5<>'' THEN $5 ELSE gateway_payment_method END,gateway_payment_channel=CASE WHEN $6<>'' THEN $6 ELSE gateway_payment_channel END,updated_at=NOW() WHERE id=$1`,[orderId,JSON.stringify(statusBody),n.status,n.transactionId,n.method,n.channel]); await audit(a.email,'admin_payment_synced',orderId,{provider:o.payment_mode,gatewayOrderId:o.gateway_order_id,state:result.state}); data={state:result.state,order:publicOrder((await q('SELECT * FROM orders WHERE id=$1',[orderId])).rows[0],true)};
     }
     else if(action==='validateVoucher'){
       const u=await requireAuth(req); if(u.role!=='user') throw safeError('Gunakan akun pelanggan.',403);
