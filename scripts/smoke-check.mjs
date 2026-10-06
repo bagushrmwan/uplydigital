@@ -12,7 +12,7 @@ const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 for(const marker of ['/api/uply']){ if(!app.includes(marker)){ console.error('APP MARKER MISSING',marker); ok=false; } }
 const health=fs.readFileSync(new URL('../api/health.js',import.meta.url),'utf8');
 if(!health.includes("hosting:'vercel'")){ console.error('Health hosting marker missing'); ok=false; }
-if(!health.includes("version:'31.3'")){ console.error('V31.3 health version missing'); ok=false; }
+if(!health.includes("version:'31.4'")){ console.error('V31.4 health version missing'); ok=false; }
 
 const api=fs.readFileSync(new URL('../api/uply.js',import.meta.url),'utf8');
 for(const marker of ['saveVoucher','adjustBalance','setCustomerTier','validateVoucher','markNotificationsRead']){ if(!api.includes(marker)){console.error('API FEATURE MISSING',marker);ok=false;} }
@@ -59,4 +59,7 @@ const belibayar=fs.readFileSync(new URL('../lib/belibayar.js',import.meta.url),'
 if(!belibayar.includes('probeBelibayarBackend')){console.error('V31.3 BELIBAYAR PROBE MISSING');ok=false;}
 if(!health.includes('runtimeConnected')){console.error('V31.3 BELIBAYAR RUNTIME HEALTH MISSING');ok=false;}
 if(!ok) process.exit(1);
-console.log('Smoke check OK — V31.3 payment visibility + BeliBayar runtime probe ready');
+if(!belibayar.includes('flattenMessage')||!belibayar.includes('providerMessage')){console.error('V31.4 BELIBAYAR ERROR NORMALIZER MISSING');ok=false;}
+if(!app.includes('readableError')){console.error('V31.4 FRONTEND ERROR NORMALIZER MISSING');ok=false;}
+if(!ok) process.exit(1);
+console.log('Smoke check OK — V31.4 BeliBayar error handling + V31.3 payment visibility ready');
