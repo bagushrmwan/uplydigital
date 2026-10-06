@@ -96,7 +96,7 @@ async function catalog(){
   const products=pr.rows.map(p=>publicProduct({...p,best_seller:best.has(p.id)},invProduct[p.id]||0,variantsByProduct[p.id]||[],mediaByProduct[p.id]||[]));
   const methods=availablePaymentMethods(s,br.rows);
   const cfg=configuredPaymentMode();
-  return {products,banks:br.rows,paymentMethods:methods,settings:{storeName:s.storeName||'Uply Digital',whatsapp:s.whatsapp||'',hours:s.hours||'',storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,notice:s.notice||'',promoBanner:s.promoBanner||'',paymentMode:cfg,paymentReady:methods.some(m=>m.id!=='balance'),paymentProvider:methods.map(m=>m.label).join(' · '),manualPaymentEnabled:bool(s.manualPaymentEnabled),midtransPaymentEnabled:bool(s.midtransPaymentEnabled),belibayarPaymentEnabled:bool(s.belibayarPaymentEnabled),duitkuPaymentEnabled:bool(s.duitkuPaymentEnabled),balancePaymentEnabled:bool(s.balancePaymentEnabled),qrisManualReady:!!s.qrisImageData,qrisName:s.qrisName||'QRIS Manual'}};
+  return {products,banks:br.rows,paymentMethods:methods,settings:{storeName:s.storeName||'Uply Digital',whatsapp:s.whatsapp||'',hours:s.hours||'',storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,notice:s.notice||'',promoBanner:s.promoBanner||'',paymentMode:cfg,paymentReady:methods.some(m=>m.id!=='balance'),paymentProvider:methods.map(m=>m.label).join(' · '),manualPaymentEnabled:bool(s.manualPaymentEnabled),qrisManualPaymentEnabled:bool(s.qrisManualPaymentEnabled),midtransPaymentEnabled:bool(s.midtransPaymentEnabled),belibayarPaymentEnabled:bool(s.belibayarPaymentEnabled),duitkuPaymentEnabled:bool(s.duitkuPaymentEnabled),balancePaymentEnabled:bool(s.balancePaymentEnabled),qrisManualReady:!!s.qrisImageData,qrisName:s.qrisName||'QRIS Manual'}};
 }
 async function getUserById(userId){ const {rows}=await q(`SELECT u.id,u.email,u.name,u.phone,u.balance,u.membership_tier,u.membership_manual,u.created_at,COUNT(o.id) FILTER (WHERE o.status='completed')::int AS completed_count,COALESCE(SUM(CASE WHEN o.status='completed' THEN COALESCE(NULLIF(o.subtotal,0),o.price*o.quantity)-o.discount ELSE 0 END),0)::bigint AS spent FROM users u LEFT JOIN orders o ON o.user_id=u.id WHERE u.id=$1 GROUP BY u.id LIMIT 1`,[userId]); const u=rows[0]; if(!u)return u; const settings=await getSettings(); const autoEnabled=bool(settings.autoRoleEnabled); const tier=(u.membership_manual||!autoEnabled)?(u.membership_tier||'customer'):tierFromStats(u.completed_count,u.spent); return {...u,balance:Number(u.balance||0),membershipTier:tier,membershipManual:!!u.membership_manual,completedCount:Number(u.completed_count||0),spent:Number(u.spent||0)}; }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -149,7 +149,7 @@ function availablePaymentMethods(settings,banks){
   if(bool(settings.belibayarPaymentEnabled) && gatewayReady('belibayar')) methods.push({id:'belibayar',label:'BeliBayar',type:'gateway'});
   if(bool(settings.duitkuPaymentEnabled) && gatewayReady('duitku')) methods.push({id:'duitku',label:'Duitku',type:'gateway'});
   if(bool(settings.manualPaymentEnabled) && banks.length) methods.push({id:'manual',label:'Transfer Bank Manual',type:'manual'});
-  if(bool(settings.manualPaymentEnabled) && settings.qrisImageData) methods.push({id:'qris_manual',label:settings.qrisName||'QRIS Manual',type:'manual_qris'});
+  if(bool(settings.qrisManualPaymentEnabled) && settings.qrisImageData) methods.push({id:'qris_manual',label:settings.qrisName||'QRIS Manual',type:'manual_qris'});
   if(!methods.some(m=>m.id!=='balance')){
     if(cfg==='midtrans'&&gatewayReady('midtrans')) methods.push({id:'midtrans',label:'Midtrans',type:'gateway'});
     else if(banks.length&&bool(settings.manualPaymentEnabled)) methods.push({id:'manual',label:'Transfer Bank Manual',type:'manual'});
@@ -453,7 +453,7 @@ export default async function handler(req,res){
         paymentEvents:paymentEvents.rows.map(x=>({id:x.id,eventKey:x.event_key,orderId:x.order_id,error:x.error||'',processedAt:x.processed_at,createdAt:x.created_at})),
         analytics:{daily:daily.rows.map(r=>({...r,orders:Number(r.orders),revenue:Number(r.revenue)})),topProducts:topProducts.rows.map(r=>({...r,completed:Number(r.completed),units:Number(r.units),revenue:Number(r.revenue)})),paymentMix:paymentMix.rows.map(r=>({...r,orders:Number(r.orders),revenue:Number(r.revenue)})),profit:orders.rows.filter(o=>o.status==='completed').reduce((n,o)=>n+(Number(o.subtotal||Number(o.price)*Number(o.quantity))-Number(o.discount||0)-Number(o.cost_price||0)*Number(o.quantity)),0)},
         audit:aud.rows,
-        settings:{...s,qrisImageData:undefined,qrisImageMime:undefined,storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,paymentMode:configuredPaymentMode(),paymentReady:methods.some(m=>m.id!=='balance'),paymentMethods:methods,gatewayHealth:gatewayHealth(),manualPaymentEnabled:bool(s.manualPaymentEnabled),midtransPaymentEnabled:bool(s.midtransPaymentEnabled),belibayarPaymentEnabled:bool(s.belibayarPaymentEnabled),duitkuPaymentEnabled:bool(s.duitkuPaymentEnabled),balancePaymentEnabled:bool(s.balancePaymentEnabled),autoRoleEnabled:bool(s.autoRoleEnabled),qrisManualReady:!!s.qrisImageData,qrisName:s.qrisName||'QRIS Manual'},
+        settings:{...s,qrisImageData:undefined,qrisImageMime:undefined,storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,paymentMode:configuredPaymentMode(),paymentReady:methods.some(m=>m.id!=='balance'),paymentMethods:methods,gatewayHealth:gatewayHealth(),manualPaymentEnabled:bool(s.manualPaymentEnabled),qrisManualPaymentEnabled:bool(s.qrisManualPaymentEnabled),midtransPaymentEnabled:bool(s.midtransPaymentEnabled),belibayarPaymentEnabled:bool(s.belibayarPaymentEnabled),duitkuPaymentEnabled:bool(s.duitkuPaymentEnabled),balancePaymentEnabled:bool(s.balancePaymentEnabled),autoRoleEnabled:bool(s.autoRoleEnabled),qrisManualReady:!!s.qrisImageData,qrisName:s.qrisName||'QRIS Manual'},
         admin:{email:a.email}
       };
     }
@@ -579,14 +579,14 @@ export default async function handler(req,res){
       const vals={
         storeName:text(x.storeName,60)||'Uply Digital',whatsapp:phone(x.whatsapp,false),hours:text(x.hours,120),
         paymentHours:String(Math.max(1,Math.min(72,Number(x.paymentHours)||24))),notice:text(x.notice,250),promoBanner:text(x.promoBanner,180),
-        storeOpen:String(bool(x.storeOpen)),manualPaymentEnabled:String(bool(x.manualPaymentEnabled)),midtransPaymentEnabled:String(bool(x.midtransPaymentEnabled)),belibayarPaymentEnabled:String(bool(x.belibayarPaymentEnabled)),duitkuPaymentEnabled:String(bool(x.duitkuPaymentEnabled)),
+        storeOpen:String(bool(x.storeOpen)),manualPaymentEnabled:String(bool(x.manualPaymentEnabled)),qrisManualPaymentEnabled:String(bool(x.qrisManualPaymentEnabled)),midtransPaymentEnabled:String(bool(x.midtransPaymentEnabled)),belibayarPaymentEnabled:String(bool(x.belibayarPaymentEnabled)),duitkuPaymentEnabled:String(bool(x.duitkuPaymentEnabled)),
         balancePaymentEnabled:String(bool(x.balancePaymentEnabled)),autoRoleEnabled:String(bool(x.autoRoleEnabled)),qrisName:text(x.qrisName,80)||'QRIS Manual'
       };
       const upload=x.qrisUpload&&typeof x.qrisUpload==='object'?x.qrisUpload:null;
       if(upload){const mime=text(upload.mime,80),base64=String(upload.base64||'');if(!['image/jpeg','image/png','image/webp'].includes(mime)) throw safeError('QRIS harus JPG, PNG, atau WebP.');if(base64.length>1800000) throw safeError('Ukuran QRIS maksimal sekitar 1,3 MB.');if(!/^[A-Za-z0-9+/=]+$/.test(base64)) throw safeError('Data QRIS tidak valid.');vals.qrisImageMime=mime;vals.qrisImageData=base64;}
       if(bool(x.clearQris)){vals.qrisImageMime='';vals.qrisImageData='';}
       for(const [k,v] of Object.entries(vals)) await q(`INSERT INTO settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`,[k,v]);
-      await audit(a.email,'settings_saved','',{payment:{manual:bool(x.manualPaymentEnabled),midtrans:bool(x.midtransPaymentEnabled),belibayar:bool(x.belibayarPaymentEnabled),duitku:bool(x.duitkuPaymentEnabled),balance:bool(x.balancePaymentEnabled)},qrisUpload:!!upload}); data=true;
+      await audit(a.email,'settings_saved','',{payment:{manual:bool(x.manualPaymentEnabled),qrisManual:bool(x.qrisManualPaymentEnabled),midtrans:bool(x.midtransPaymentEnabled),belibayar:bool(x.belibayarPaymentEnabled),duitku:bool(x.duitkuPaymentEnabled),balance:bool(x.balancePaymentEnabled)},qrisUpload:!!upload}); data=true;
     }
     else if(action==='inventoryAdd'){
       const a=await requireAdmin(req);
