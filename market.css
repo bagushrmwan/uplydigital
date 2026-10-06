@@ -576,3 +576,110 @@ html[data-theme="dark"] .payment-page,html[data-theme="dark"] .warranty-page{bac
 /* UPLY DIGITAL V31.1 — CLEAR PAYMENT GATEWAY TOGGLES */
 .gateway-manager{margin:16px 0;padding:16px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(180deg,#fff,var(--surface-2))}.gateway-manager-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}.gateway-manager-head h3{margin:4px 0 5px}.gateway-manager-head p{margin:0;color:var(--muted);font-size:12px;line-height:1.55}.gateway-toggle-list{display:grid;gap:10px}.gateway-toggle-card{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:12px;align-items:center;padding:13px;border:1px solid var(--line);border-radius:15px;background:#fff;cursor:pointer;transition:.18s ease}.gateway-toggle-card:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(17,35,75,.07)}.gateway-toggle-card.is-enabled{border-color:rgba(11,92,255,.35);box-shadow:0 0 0 2px rgba(11,92,255,.06)}.gateway-toggle-card.is-not-ready{opacity:.7;cursor:not-allowed}.gateway-toggle-mark{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;font-weight:900;background:#edf3ff;color:#0b5cff}.gateway-toggle-mark.belibayar{background:#fff4d8;color:#886000}.gateway-toggle-mark.duitku{background:#eef8f2;color:#087a47}.gateway-toggle-copy{display:grid;min-width:0}.gateway-toggle-copy strong{font-size:14px}.gateway-toggle-copy small{font-size:12px;color:var(--muted);margin-top:2px}.gateway-toggle-copy em{font-style:normal;font-size:10px;color:var(--muted);margin-top:5px;line-height:1.4}.gateway-toggle-side{display:grid;justify-items:end;gap:7px}.gateway-toggle-side b{font-size:9px;letter-spacing:.08em;color:var(--muted)}.gateway-toggle-card.is-enabled .gateway-toggle-side b{color:#079467}.gateway-toggle-side input{position:absolute;opacity:0;pointer-events:none}.gateway-toggle-side i{position:relative;width:46px;height:26px;border-radius:999px;background:#cfd6e4;transition:.2s}.gateway-toggle-side i:after{content:"";position:absolute;width:20px;height:20px;left:3px;top:3px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.2);transition:.2s}.gateway-toggle-side input:checked+i{background:#0b5cff}.gateway-toggle-side input:checked+i:after{transform:translateX(20px)}.gateway-toggle-side input:disabled+i{background:#dde1e8}.gateway-manual-toggles{display:grid;gap:8px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)}.gateway-v311-note{margin-top:12px!important}
 @media(max-width:700px){.gateway-toggle-card{grid-template-columns:40px minmax(0,1fr);align-items:start}.gateway-toggle-mark{width:40px;height:40px}.gateway-toggle-side{grid-column:1/-1;grid-template-columns:1fr auto;align-items:center;justify-items:start;padding-left:52px}.gateway-toggle-side i{justify-self:end}.gateway-manager{padding:13px}.gateway-manager-head p{font-size:11px}}
+
+
+/* ============================================================
+   UPLY DIGITAL V31.2 — BALANCED LIGHT/DARK + QRIS MANUAL TOGGLE
+   ============================================================ */
+:root{
+  --ui-page:#f7f9fd;
+  --ui-surface:#ffffff;
+  --ui-surface-2:#f2f6fc;
+  --ui-surface-3:#eaf1fb;
+  --ui-text:#14213a;
+  --ui-heading:#081735;
+  --ui-muted:#65748d;
+  --ui-soft:#8793a7;
+  --ui-border:#dce5f2;
+  --ui-border-strong:#cbd8ea;
+  --ui-input:#ffffff;
+  --ui-shadow:0 10px 28px rgba(14,42,88,.07);
+}
+html[data-theme="dark"]{
+  --ui-page:#08111f;
+  --ui-surface:#101a2b;
+  --ui-surface-2:#0d1727;
+  --ui-surface-3:#16243a;
+  --ui-text:#edf4ff;
+  --ui-heading:#ffffff;
+  --ui-muted:#aebbd0;
+  --ui-soft:#8e9cb3;
+  --ui-border:#263750;
+  --ui-border-strong:#354966;
+  --ui-input:#0c1626;
+  --ui-shadow:0 12px 34px rgba(0,0,0,.24);
+}
+
+/* Hero selalu berada di atas gradasi biru, jadi teks harus high-contrast di kedua tema. */
+.koala-home-hero h1{color:#f8fbff!important;text-shadow:0 2px 18px rgba(0,20,64,.14)!important}
+.koala-home-hero h1 span{color:#79e3ff!important}
+.koala-home-hero p{color:#d9e8ff!important}
+.koala-hero-kicker{color:#dff7ff!important;background:rgba(255,255,255,.12)!important;border-color:rgba(255,255,255,.24)!important}
+.koala-hero-stats{background:rgba(255,255,255,.94)!important;color:#10213e!important}
+.koala-hero-stats small{color:#66748a!important}
+html[data-theme="dark"] .koala-hero-stats{background:rgba(13,25,45,.92)!important;color:#f4f8ff!important;border-color:#2d4261!important}
+html[data-theme="dark"] .koala-hero-stats small{color:#aebbd0!important}
+
+/* Marketplace + main content now share one semantic contrast system. */
+body{background:var(--ui-page)!important;color:var(--ui-text)!important}
+.koala-products-section,.koala-benefit-section,.koala-blog-section,.koala-faq,.koala-category-section,
+.v18-products,.v18-detail-page,.payment-page,.warranty-page{background:var(--ui-page)!important;color:var(--ui-text)!important}
+.market-card,.koala-benefit-grid article,.koala-blog-grid article,.koala-faq-list details,.koala-category-card,
+.v18-detail-info,.v18-buy-box,.account-card-v26,.account-title-v26,.panel,.gateway-manager,.gateway-toggle-card,
+.qris-admin-box,.payment-info-card,.claim-card,.claim-admin-card,.warranty-order-card,.warranty-stats article{
+  background:var(--ui-surface)!important;color:var(--ui-text)!important;border-color:var(--ui-border)!important;box-shadow:var(--ui-shadow)!important
+}
+.koala-section-title h2,.market-card h3,.market-price,.koala-benefit-grid h3,.koala-blog-grid h3,
+.koala-category-card strong,.v18-section-head h2,.v18-detail-info h1,.account-title-v26 h1,.account-card-head-v26 h2,
+.panel h1,.panel h2,.panel h3,.gateway-toggle-copy strong,.qris-admin-box h3,.payment-info-card h3{
+  color:var(--ui-heading)!important
+}
+.koala-section-title p,.market-category,.koala-benefit-grid p,.koala-blog-grid p,.koala-faq-list details p,
+.koala-category-card small,.market-social,.v18-mini-kicker,.account-title-v26 p,.account-card-head-v26 p,
+.field small,.tiny,.gateway-manager-head p,.gateway-toggle-copy small,.gateway-toggle-copy em,.check,.payment-info-card p{
+  color:var(--ui-muted)!important
+}
+.market-media,.account-form-v26 .field input,.field input,.field select,.field textarea,.search,.select,.catalog-search-box,
+.koala-search,.theme-option,.payment-option,.variant-card{
+  background:var(--ui-input)!important;color:var(--ui-text)!important;border-color:var(--ui-border)!important
+}
+input::placeholder,textarea::placeholder{color:var(--ui-soft)!important;opacity:1}
+.koala-search input{color:var(--ui-text)!important;-webkit-text-fill-color:var(--ui-text)!important}
+
+/* Header / mobile actions stay readable in both modes. */
+.v18-topbar{background:color-mix(in srgb,var(--ui-surface) 95%,transparent)!important;border-color:var(--ui-border)!important}
+.v18-brand strong{color:var(--ui-heading)!important}
+.v18-desktop-nav a,.v18-desktop-nav button{color:var(--ui-muted)!important}
+.market-mobile-actions{background:color-mix(in srgb,var(--ui-surface) 97%,transparent)!important;border-top-color:var(--ui-border)!important}
+.market-mobile-actions .support{background:var(--ui-surface)!important;color:#0b5cff!important}
+html[data-theme="dark"] .market-mobile-actions .support{color:#8eb3ff!important;border-color:#5b8cff!important}
+.cart-drawer{background:var(--ui-surface)!important;color:var(--ui-text)!important}
+
+/* Selected product/variant state must not become white-on-white or dark-on-dark. */
+.v18-package{background:var(--ui-surface)!important;border-color:var(--ui-border)!important;color:var(--ui-text)!important}
+.v18-package.selected{background:#edf4ff!important;border-color:#75a0ff!important;color:#10213e!important}
+html[data-theme="dark"] .v18-package.selected{background:#102b50!important;border-color:#4d85ff!important;color:#f2f7ff!important}
+.v18-package small{color:var(--ui-muted)!important}
+
+/* Admin payment switches: transfer, QRIS manual, and balance are independent. */
+.gateway-manual-toggles{display:grid!important;grid-template-columns:1fr!important;gap:9px!important}
+.manual-toggle-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:12px 13px;border:1px solid var(--ui-border);border-radius:14px;background:var(--ui-surface-2);cursor:pointer;color:var(--ui-text)}
+.manual-toggle-card span{display:grid;gap:3px}.manual-toggle-card b{color:var(--ui-heading);font-size:13px}.manual-toggle-card small{color:var(--ui-muted);font-size:11px;line-height:1.45}
+.manual-toggle-card input{width:19px;height:19px;accent-color:#0b5cff;cursor:pointer}
+.qris-admin-title{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:13px}.qris-admin-title h3{margin:0}.qris-admin-title small{color:var(--ui-muted)}
+.qris-state{display:inline-flex;align-items:center;min-height:25px;padding:4px 8px;border-radius:999px;font-size:9px;font-weight:900;letter-spacing:.05em;background:#eef2f7;color:#65748d;white-space:nowrap}
+.qris-state.on{background:#e7f8f0;color:#08764e}.qris-state.off{background:#f0f3f7;color:#69778d}
+html[data-theme="dark"] .qris-state.on{background:#123a2d;color:#78ddb6}html[data-theme="dark"] .qris-state.off{background:#19263a;color:#a9b7ca}
+
+/* Notices / status colors tuned for WCAG-like readable contrast in both modes. */
+html[data-theme="dark"] .notice{background:#15243d!important;color:#c9daf7!important}
+html[data-theme="dark"] .notice.ok{background:#123329!important;color:#84ddb9!important}
+html[data-theme="dark"] .notice.warn{background:#332812!important;color:#ffd88c!important}
+html[data-theme="dark"] .notice.error{background:#381923!important;color:#ff9aab!important}
+html[data-theme="dark"] .payment-health>div,html[data-theme="dark"] .bank-row{border-color:var(--ui-border)!important;color:var(--ui-text)!important}
+
+@media(max-width:760px){
+  .koala-home-hero h1{font-size:clamp(42px,13vw,62px)!important;line-height:.96!important}
+  .koala-home-hero p{font-size:15px!important;line-height:1.55!important;padding:0 5px}
+  .qris-admin-title{align-items:center}.manual-toggle-card{padding:12px}
+}
