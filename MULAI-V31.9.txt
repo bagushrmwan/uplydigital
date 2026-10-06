@@ -1,0 +1,7 @@
+UPLY DIGITAL V31.9
+
+1. Deploy folder ini ke Vercel.
+2. Tidak ada Environment Variable baru.
+3. Windows backend tidak perlu diubah.
+4. Setelah deploy buka /api/health dan pastikan version = 31.9.
+5. Buat checkout baru. Error PostgreSQL deadlock 40P01 seharusnya tidak muncul lagi.
