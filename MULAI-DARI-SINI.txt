@@ -1,13 +1,8 @@
-UPLY DIGITAL V29 — MULAI DARI SINI
+UPLY DIGITAL V31
 
-1. Backup database Neon production terlebih dahulu.
-2. Replace seluruh isi repository website dengan isi folder V29.
-3. Commit/push ke branch main dan tunggu Vercel selesai deploy.
-4. Environment Variables lama tetap digunakan. Tidak perlu membuat database baru.
-5. Buka /api/health. Pastikan version = 29.0, database = connected, checkoutSchemaReady = true, gallerySystemReady = true, growthSuiteReady = true.
-6. Login Admin → cek menu Garansi, Monitor Pembayaran, Laporan, dan Produk.
-7. Edit produk/varian untuk mengisi Harga Modal, Garansi (hari), dan Flash Sale jika diperlukan.
-8. Tes satu order baru sampai selesai, lalu cek Timeline Pesanan dan Warranty Center.
-9. Buka menu mobile → Metode Pembayaran. Sekarang harus menuju halaman #pembayaran, bukan Bantuan.
-
-Catatan: V29 memakai database Neon lama dan migration non-destruktif.
+1. Baca TUTORIAL-VERCEL-V31.md
+2. Update Windows backend memakai paket Windows Backend V31.
+3. Set BELIBAYAR_BACKEND_URL, BELIBAYAR_BACKEND_KEY, BELIBAYAR_BACKEND_READY, UPLY_RELAY_KEY di Vercel.
+4. Deploy.
+5. Cek /api/health version 31.0.
+6. Admin > Pembayaran & Toko > ON-kan BeliBayar.

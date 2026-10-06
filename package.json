@@ -1,13 +1,13 @@
 {
   "name": "uply-digital-vercel",
-  "version": "29.0.0",
+  "version": "31.0.0",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "check": "node --check app.js && node --check api/uply.js && node --check api/health.js && node --check api/payment-webhook.js && node --check api/product-image.js && node --check api/product-media-image.js && node --check api/qris-image.js && node --check lib/db.js && node --check lib/security.js && node --check lib/midtrans.js && node --check lib/payment-state.js && node --check lib/business.js",
+    "check": "node --check app.js && node --check api/uply.js && node --check api/health.js && node --check api/payment-webhook.js && node --check api/belibayar-webhook.js && node --check api/belibayar-relay.js && node --check api/duitku-webhook.js && node --check api/product-image.js && node --check api/product-media-image.js && node --check api/qris-image.js && node --check lib/db.js && node --check lib/security.js && node --check lib/midtrans.js && node --check lib/belibayar.js && node --check lib/duitku.js && node --check lib/gateways.js && node --check lib/payment-state.js && node --check lib/business.js",
     "test:smoke": "node scripts/smoke-check.mjs"
   },
   "dependencies": {

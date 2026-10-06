@@ -1,10 +1,10 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Uply Digital V27 - Vercel
+title Uply Digital V31 - Vercel
 
 echo ==========================================
-echo UPLY DIGITAL V27 - DEPLOY KE VERCEL
+echo UPLY DIGITAL V31 - DEPLOY KE VERCEL
 echo ==========================================
 echo.
 where node >nul 2>nul || (
