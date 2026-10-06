@@ -1,7 +1,7 @@
 import { ensureSchema, q, pool, getSettings, audit } from '../lib/db.js';
 import { id, normalizeEmail, validEmail, hashPassword, verifyPassword, safeEqual, createSession, requireAuth, requireAdmin, destroySession, securityReady, credentialSecurityReady, encryptCredentialPayload, decryptCredentialPayload } from '../lib/security.js';
 import { paymentMode as configuredPaymentMode } from '../lib/midtrans.js';
-import { AUTO_GATEWAYS, isAutomaticGateway, gatewayReady, gatewayLabel, gatewayHealth, probeGatewayConnectivity, defaultGatewayMethod, createGatewayPayment, getGatewayStatus, expireGatewayPayment, normalizedCreatedPayment, normalizedStatus } from '../lib/gateways.js';
+import { AUTO_GATEWAYS, isAutomaticGateway, gatewayReady, gatewayLabel, gatewayHealth, probeGatewayConnectivity, getGatewayChannels, defaultGatewayMethod, createGatewayPayment, getGatewayStatus, expireGatewayPayment, normalizedCreatedPayment, normalizedStatus } from '../lib/gateways.js';
 import { applyGatewayStatus, autoFulfillOrder } from '../lib/payment-state.js';
 import { sendEmail } from '../lib/email.js';
 import { syncMembership, notifyAdmin, notifyUser, refundOrderCredits, tierFromStats } from '../lib/business.js';
@@ -95,8 +95,13 @@ async function catalog(){
   const best=new Set(sales.rows.filter(x=>Number(x.n)>0).map(x=>x.product_id));
   const products=pr.rows.map(p=>publicProduct({...p,best_seller:best.has(p.id)},invProduct[p.id]||0,variantsByProduct[p.id]||[],mediaByProduct[p.id]||[]));
   const methods=availablePaymentMethods(s,br.rows);
+  let belibayarChannels=[];
+  if(methods.some(m=>m.id==='belibayar')){
+    try{belibayarChannels=await getGatewayChannels('belibayar');}
+    catch(e){console.warn('[CATALOG BELIBAYAR CHANNELS]',e?.message||e);}
+  }
   const cfg=configuredPaymentMode();
-  return {products,banks:br.rows,paymentMethods:methods,settings:{storeName:s.storeName||'Uply Digital',whatsapp:s.whatsapp||'',hours:s.hours||'',storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,notice:s.notice||'',promoBanner:s.promoBanner||'',paymentMode:cfg,paymentReady:methods.some(m=>m.id!=='balance'),paymentProvider:methods.map(m=>m.label).join(' · '),manualPaymentEnabled:bool(s.manualPaymentEnabled),qrisManualPaymentEnabled:bool(s.qrisManualPaymentEnabled),midtransPaymentEnabled:bool(s.midtransPaymentEnabled),belibayarPaymentEnabled:bool(s.belibayarPaymentEnabled),duitkuPaymentEnabled:bool(s.duitkuPaymentEnabled),balancePaymentEnabled:bool(s.balancePaymentEnabled),qrisManualReady:!!s.qrisImageData,qrisName:s.qrisName||'QRIS Manual'}};
+  return {products,banks:br.rows,paymentMethods:methods,paymentChannels:{belibayar:belibayarChannels},settings:{storeName:s.storeName||'Uply Digital',whatsapp:s.whatsapp||'',hours:s.hours||'',storeOpen:bool(s.storeOpen),paymentHours:Number(s.paymentHours)||24,notice:s.notice||'',promoBanner:s.promoBanner||'',paymentMode:cfg,paymentReady:methods.some(m=>m.id!=='balance'),paymentProvider:methods.map(m=>m.label).join(' · '),manualPaymentEnabled:bool(s.manualPaymentEnabled),qrisManualPaymentEnabled:bool(s.qrisManualPaymentEnabled),midtransPaymentEnabled:bool(s.midtransPaymentEnabled),belibayarPaymentEnabled:bool(s.belibayarPaymentEnabled),duitkuPaymentEnabled:bool(s.duitkuPaymentEnabled),balancePaymentEnabled:bool(s.balancePaymentEnabled),qrisManualReady:!!s.qrisImageData,qrisName:s.qrisName||'QRIS Manual'}};
 }
 async function getUserById(userId){ const {rows}=await q(`SELECT u.id,u.email,u.name,u.phone,u.balance,u.membership_tier,u.membership_manual,u.created_at,COUNT(o.id) FILTER (WHERE o.status='completed')::int AS completed_count,COALESCE(SUM(CASE WHEN o.status='completed' THEN COALESCE(NULLIF(o.subtotal,0),o.price*o.quantity)-o.discount ELSE 0 END),0)::bigint AS spent FROM users u LEFT JOIN orders o ON o.user_id=u.id WHERE u.id=$1 GROUP BY u.id LIMIT 1`,[userId]); const u=rows[0]; if(!u)return u; const settings=await getSettings(); const autoEnabled=bool(settings.autoRoleEnabled); const tier=(u.membership_manual||!autoEnabled)?(u.membership_tier||'customer'):tierFromStats(u.completed_count,u.spent); return {...u,balance:Number(u.balance||0),membershipTier:tier,membershipManual:!!u.membership_manual,completedCount:Number(u.completed_count||0),spent:Number(u.spent||0)}; }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -165,7 +170,13 @@ async function createAutomaticPaymentForOrder(order,provider){
   const prefix={midtrans:'M',belibayar:'B',duitku:'D'}[provider]||'P';
   const gatewayOrderId=`${order.id}-${prefix}${nextAttempt}`.slice(0,50);
   const defaults=defaultGatewayMethod(provider);
-  await q(`UPDATE orders SET payment_url='',gateway_status='creating',gateway_order_id=$2,gateway_payment_method=$3,gateway_payment_channel=$4,gateway_attempt=$5,updated_at=NOW() WHERE id=$1`,[order.id,gatewayOrderId,defaults.method,defaults.channel,nextAttempt]);
+  const chosenMethod=provider==='belibayar'&&['qris','virtual_account'].includes(String(order.gateway_payment_method||'').toLowerCase())
+    ? String(order.gateway_payment_method).toLowerCase()
+    : defaults.method;
+  const chosenChannel=provider==='belibayar'
+    ? (chosenMethod==='qris'?'QRIS':String(order.gateway_payment_channel||'').toUpperCase())
+    : defaults.channel;
+  await q(`UPDATE orders SET payment_url='',gateway_status='creating',gateway_order_id=$2,gateway_payment_method=$3,gateway_payment_channel=$4,gateway_attempt=$5,updated_at=NOW() WHERE id=$1`,[order.id,gatewayOrderId,chosenMethod,chosenChannel,nextAttempt]);
   await q(`INSERT INTO payment_attempts(gateway_order_id,order_id,provider,attempt_no,status,payment_url,payload) VALUES($1,$2,$3,$4,'creating','','{}'::jsonb) ON CONFLICT(gateway_order_id) DO UPDATE SET provider=EXCLUDED.provider,status='creating',updated_at=NOW()`,[gatewayOrderId,order.id,provider,nextAttempt]);
   const fresh=(await q('SELECT * FROM orders WHERE id=$1',[order.id])).rows[0];
   try{
@@ -285,6 +296,12 @@ export default async function handler(req,res){
         if(requested==='belibayar'){
           const probe=await probeGatewayConnectivity('belibayar');
           if(!probe.ok) throw safeError(`BeliBayar belum dapat digunakan: ${probe.message}`,503);
+          const submethod=text(p.paymentSubmethod,30).toLowerCase()||'qris';
+          const payChannel=text(p.paymentChannel,30).toUpperCase();
+          if(!['qris','virtual_account'].includes(submethod)) throw safeError('Pilih QRIS atau Virtual Account BeliBayar.');
+          const activeChannels=await getGatewayChannels('belibayar');
+          if(submethod==='qris'&&!activeChannels.some(c=>c.method==='qris')) throw safeError('QRIS BeliBayar sedang tidak aktif untuk merchant.');
+          if(submethod==='virtual_account'&&!activeChannels.some(c=>c.method==='virtual_account'&&c.code===payChannel)) throw safeError('Virtual Account bank yang dipilih sedang tidak aktif.');
         }
       }
       data={ready:true,productId:prod.id,variantId:variant?.id||'',quantity:qty,paymentMethod:due===0?'balance':requested};
@@ -357,7 +374,16 @@ export default async function handler(req,res){
           }
           if(voucher.code) await client.query('INSERT INTO voucher_usages(voucher_code,user_id,order_id,discount) VALUES($1,$2,$3,$4)',[voucher.code,u.id,orderId,voucher.discount]);
 
-          const gatewayDefaults=isAutomaticGateway(mode)?defaultGatewayMethod(mode):{method:mode,channel:mode==='qris_manual'?'QRIS_MANUAL':''}; const selectedPayMethod=gatewayDefaults.method; const selectedPayChannel=gatewayDefaults.channel;
+          const gatewayDefaults=isAutomaticGateway(mode)?defaultGatewayMethod(mode):{method:mode,channel:mode==='qris_manual'?'QRIS_MANUAL':''};
+          let selectedPayMethod=gatewayDefaults.method, selectedPayChannel=gatewayDefaults.channel;
+          if(mode==='belibayar'){
+            const submethod=text(p.paymentSubmethod,30).toLowerCase()||'qris';
+            const requestedChannel=text(p.paymentChannel,30).toUpperCase();
+            if(!['qris','virtual_account'].includes(submethod)) throw safeError('Pilih QRIS atau Virtual Account BeliBayar.');
+            if(submethod==='virtual_account'&&!['BCA','BNI','BRI','MANDIRI','PERMATA','BSI','MUAMALAT','CIMB','SINARMAS','BNC','MAYBANK'].includes(requestedChannel)) throw safeError('Virtual Account bank tidak valid.');
+            selectedPayMethod=submethod;
+            selectedPayChannel=submethod==='qris'?'QRIS':requestedChannel;
+          }
           const publicThumb=prod.thumbnail_data?`/api/product-image?id=${encodeURIComponent(prod.id)}&v=${encodeURIComponent(new Date(prod.updated_at||Date.now()).getTime())}`:(prod.thumbnail_url||'');
           const initialStatus=mode==='balance'?'processing':'pending_payment'; const verified=mode==='balance';
           const costSnapshot=Math.max(0,Number((variant||prod).cost_price||0)); const warrantySnapshot=warrantyDays(prod,variant); const saleApplied=!!sourcePrice.saleActive;
