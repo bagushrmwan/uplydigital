@@ -3,7 +3,7 @@ import { id, normalizeEmail, validEmail, hashPassword, verifyPassword, safeEqual
 import { paymentMode as configuredPaymentMode } from '../lib/midtrans.js';
 import { AUTO_GATEWAYS, isAutomaticGateway, gatewayReady, gatewayLabel, gatewayHealth, probeGatewayConnectivity, getGatewayChannels, defaultGatewayMethod, createGatewayPayment, getGatewayStatus, expireGatewayPayment, normalizedCreatedPayment, normalizedStatus } from '../lib/gateways.js';
 import { applyGatewayStatus, autoFulfillOrder } from '../lib/payment-state.js';
-import { sendEmail } from '../lib/email.js';
+import { sendEmail, emailTemplate } from '../lib/email.js';
 import { syncMembership, notifyAdmin, notifyUser, refundOrderCredits, tierFromStats } from '../lib/business.js';
 
 function safeError(message,status=400){ const e=new Error(message); e.safe=true; e.status=status; return e; }
@@ -401,7 +401,18 @@ export default async function handler(req,res){
         await audit(u.email,'order_created',order.id,{productId:prod.id,variantId:variant?.id||'',subtotal:Number(order.subtotal),discount:Number(order.discount),balanceUsed:Number(order.balance_used),total:Number(order.total),mode,voucher:voucher.code});
         await notifyAdmin('order','Pesanan baru',`${prod.name}${variant?` · ${variant.name}`:''} · ${order.name} · Rp${Number(order.total).toLocaleString('id-ID')}`,order.id);
         if(lowStockAfter&&lowStockAfter.stock<=lowStockAfter.threshold) await notifyAdmin('stock','Stok menipis',`${prod.name}${lowStockAfter.label?` · ${lowStockAfter.label}`:''} tersisa ${lowStockAfter.stock}.`,variant?.id||prod.id);
-        await sendEmail(u.email,`Pesanan ${order.id} dibuat`,`<h2>Pesanan Uply Digital dibuat</h2><p>${escapeHtml(prod.name)} · ${escapeHtml(variant?.name||prod.duration)}</p><p>Subtotal: <strong>Rp${Number(order.subtotal).toLocaleString('id-ID')}</strong></p>${Number(order.discount)?`<p>Diskon: -Rp${Number(order.discount).toLocaleString('id-ID')}</p>`:''}${Number(order.balance_used)?`<p>Saldo: -Rp${Number(order.balance_used).toLocaleString('id-ID')}</p>`:''}<p>Total dibayar: <strong>Rp${Number(order.total).toLocaleString('id-ID')}</strong></p><p>Status: ${mode==='balance'?'pembayaran lunas dari saldo':'menunggu pembayaran'}.</p>`);
+        const orderLink=`${String(process.env.SITE_URL||'').replace(/\/$/,'')}/#pesanan`;
+        const emailBody=`<p style="margin:0 0 16px">Halo <strong>${escapeHtml(order.name)}</strong>, pesanan kamu sudah masuk ke sistem Uply Digital.</p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#f8faff;border-radius:14px">
+            <tr><td style="padding:9px 14px;color:#71809a">Order ID</td><td style="padding:9px 14px;text-align:right;font-weight:800;color:#0f1d3a">${escapeHtml(order.id)}</td></tr>
+            <tr><td style="padding:9px 14px;color:#71809a">Produk</td><td style="padding:9px 14px;text-align:right;font-weight:800;color:#0f1d3a">${escapeHtml(prod.name)}</td></tr>
+            <tr><td style="padding:9px 14px;color:#71809a">Varian</td><td style="padding:9px 14px;text-align:right;color:#0f1d3a">${escapeHtml(variant?.name||prod.duration)}</td></tr>
+            <tr><td style="padding:9px 14px;color:#71809a">Jumlah</td><td style="padding:9px 14px;text-align:right;color:#0f1d3a">${Number(order.quantity)}</td></tr>
+            <tr><td style="padding:9px 14px;color:#71809a">Metode</td><td style="padding:9px 14px;text-align:right;color:#0f1d3a">${escapeHtml(mode==='belibayar'?`BeliBayar ${selectedPayMethod==='virtual_account'?selectedPayChannel:'QRIS'}`:gatewayLabel(mode)||mode)}</td></tr>
+            <tr><td style="padding:12px 14px;border-top:1px solid #e4eaf5;color:#0f1d3a;font-weight:800">Total</td><td style="padding:12px 14px;border-top:1px solid #e4eaf5;text-align:right;color:#0b5cff;font-size:18px;font-weight:900">Rp${Number(order.total).toLocaleString('id-ID')}</td></tr>
+          </table>
+          <p style="margin:18px 0 0">Status: <strong>${mode==='balance'?'Pembayaran lunas dari saldo':'Menunggu pembayaran'}</strong>.</p>`;
+        await sendEmail(u.email,`Pesanan ${order.id} berhasil dibuat`,emailTemplate({title:'Pesanan berhasil dibuat',eyebrow:'UPLY DIGITAL · ORDER',body:emailBody,ctaLabel:'Lihat Pesanan Saya',ctaUrl:orderLink,note:'Simpan Order ID untuk memudahkan pengecekan status pesanan.'}));
         data={order:publicOrder((await q('SELECT * FROM orders WHERE id=$1',[order.id])).rows[0]),paymentUrl:paymentUrl||order.payment_url||'',paymentData:paymentData||order.gateway_payload||null,paymentError,duplicate:false};
       }
     }
@@ -678,7 +689,7 @@ export default async function handler(req,res){
       if(status==='cancelled') await refundOrderCredits(orderId,a.email,'Pesanan dibatalkan admin.');
       if(status==='processing') await notifyUser(old.user_id,'order','Pesanan sedang diproses',`${old.product_name} sedang diproses admin.`,orderId);
       if(status==='cancelled') await notifyUser(old.user_id,'order','Pesanan dibatalkan',`${old.product_name} dibatalkan.`,orderId);
-      if(status==='completed'){await syncMembership(old.user_id,a.email);await notifyAdmin('success','Pesanan selesai',`${old.product_name} · ${old.name}`,orderId);await notifyUser(old.user_id,'success','Pesanan selesai',`${old.product_name} sudah selesai.${Number(old.warranty_days||0)>0?` Garansi aktif ${Number(old.warranty_days)} hari.`:''}`,orderId);await sendEmail(old.email,`Pesanan ${orderId} selesai`,`<h2>Pesanan selesai</h2><p>${escapeHtml(old.product_name)}</p><pre style="white-space:pre-wrap">${escapeHtml(delivery)}</pre>`);} 
+      if(status==='completed'){await syncMembership(old.user_id,a.email);await notifyAdmin('success','Pesanan selesai',`${old.product_name} · ${old.name}`,orderId);await notifyUser(old.user_id,'success','Pesanan selesai',`${old.product_name} sudah selesai.${Number(old.warranty_days||0)>0?` Garansi aktif ${Number(old.warranty_days)} hari.`:''}`,orderId);await sendEmail(old.email,`Pesanan ${orderId} selesai`,emailTemplate({title:'Pesanan selesai',eyebrow:'UPLY DIGITAL · SELESAI',body:`<p>Pesanan <strong>${escapeHtml(old.product_name)}</strong> sudah selesai.</p><div style="margin-top:16px;padding:15px;background:#f7f9fd;border-radius:12px;white-space:pre-wrap;color:#17233c">${escapeHtml(delivery)}</div>`,ctaLabel:'Buka Dashboard',ctaUrl:`${String(process.env.SITE_URL||'').replace(/\/$/,'')}/#dashboard`,note:Number(old.warranty_days||0)>0?`Garansi aktif ${Number(old.warranty_days)} hari sesuai ketentuan produk.`:''}));} 
       data=publicOrder((await q('SELECT * FROM orders WHERE id=$1',[orderId])).rows[0],true);
     }
 
