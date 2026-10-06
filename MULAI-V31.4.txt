@@ -1,0 +1,13 @@
+UPLY DIGITAL V31.4
+
+Deploy folder ini ke Vercel dan Redeploy Production.
+Environment Variables V31.3 tidak perlu diubah.
+
+Untuk BeliBayar:
+- BELIBAYAR_BACKEND_URL=https://uplyapi.duckdns.org
+- BELIBAYAR_BACKEND_KEY harus sama dengan UPLY_BACKEND_KEY Windows
+- BELIBAYAR_BACKEND_READY=true
+- UPLY_RELAY_KEY sama di Vercel dan Windows
+
+Setelah deploy, buka /api/health dan pastikan version=31.4 serta BeliBayar runtimeConnected/backendAuth=true.
+Jika order lama menampilkan [object Object], tekan Buat pembayaran lagi agar attempt baru menggunakan parser V31.4.

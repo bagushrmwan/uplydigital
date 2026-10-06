@@ -338,6 +338,19 @@ const automaticPaymentIds=['midtrans','belibayar','duitku'];
 function isAutomaticPayment(id){return automaticPaymentIds.includes(String(id||''));}
 function gatewayDisplay(id){return ({midtrans:'Midtrans',belibayar:'BeliBayar',duitku:'Duitku'})[id]||id;}
 function paymentIcon(id){return ({midtrans:'M',belibayar:'BB',duitku:'D',qris_manual:'QR',balance:'S',manual:'B'})[id]||'P';}
+
+function readableError(value){
+  if(value===null||value===undefined) return '';
+  if(typeof value==='string'||typeof value==='number'||typeof value==='boolean') return String(value);
+  if(Array.isArray(value)) return value.map(readableError).filter(Boolean).join(' · ');
+  if(typeof value==='object'){
+    for(const k of ['message','messages','error','detail','reason']){if(value[k]){const x=readableError(value[k]);if(x)return x;}}
+    const parts=Object.entries(value).filter(([k])=>!['code','status','success'].includes(k)).map(([k,v])=>{const x=readableError(v);return x?`${k}: ${x}`:'';}).filter(Boolean);
+    const code=value?.data?.code||value?.code;
+    return (parts.join(' · ')||'Terjadi kesalahan pada payment gateway')+(code?` [${code}]`:'');
+  }
+  return String(value);
+}
 function paymentDescription(id){if(isAutomaticPayment(id))return 'Otomatis: transaksi dibuat via API dan status diperbarui melalui webhook/status sync.';if(id==='qris_manual')return 'Scan QRIS toko lalu upload bukti pembayaran.';if(id==='balance')return 'Gunakan saldo akun Uply.';return 'Transfer ke rekening toko lalu upload bukti.';}
 
 function paymentMethodsPage(){
@@ -617,7 +630,7 @@ function orderDetail(id){
     const code=pd.paymentCode?`<div class="notice"><strong>Kode pembayaran:</strong> ${esc(pd.paymentCode)}</div>`:'';
     const instruction=url+qr+va+code, hasInstruction=!!instruction;
     const gatewayError=String(o.gatewayStatus||'').toLowerCase()==='error'
-      ? `<div class="notice error"><strong>${esc(provider)} belum berhasil membuat transaksi.</strong><br>${esc((o.note||'Periksa koneksi backend pembayaran lalu tekan Buat pembayaran.').split('\n').slice(-1)[0])}</div>`
+      ? `<div class="notice error"><strong>${esc(provider)} belum berhasil membuat transaksi.</strong><br>${esc(readableError((o.note||'Periksa koneksi backend pembayaran lalu tekan Buat pembayaran.').split('\n').slice(-1)[0]).replace(/\[object Object\]/g,'Detail error gateway tidak terbaca pada versi lama. Tekan Buat pembayaran lagi.'))}</div>`
       : '';
     pay=`<div class="panel"><h2>Pembayaran otomatis · ${esc(provider)}</h2><p>Status gateway: <strong>${esc(o.gatewayStatus||'belum dibuat')}</strong></p>${gatewayError}${instruction}<div class="button-row">${!hasInstruction?`<button class="btn" data-pay="${esc(o.id)}">Buat pembayaran</button>`:''}<button class="btn light" data-sync-pay="${esc(o.id)}">↻ Cek status pembayaran</button></div>${pd.transactionId?`<p class="tiny">ID transaksi: ${esc(pd.transactionId)}</p>`:''}<p class="tiny">Status pembayaran diperbarui otomatis. Tombol Cek status tetap tersedia sebagai cadangan.</p></div>`;
   }
@@ -1090,7 +1103,7 @@ document.addEventListener('submit', async e => {
       else{
         location.hash='#pesanan/'+encodeURIComponent(r.order.id);await route();
         const provider=gatewayDisplay(r.order?.paymentMode||g('paymentMethod')||'gateway');
-        const paymentError=typeof r.paymentError==='string'?r.paymentError:(r.paymentError?JSON.stringify(r.paymentError):'');
+        const paymentError=readableError(r.paymentError);
         msg(paymentError?`Pesanan dibuat, tetapi ${provider} belum dapat membuat pembayaran: ${paymentError}`:'Pesanan berhasil dibuat. Lanjutkan pembayaran.');
       }
     } else if(f.id==='proofForm'){
