@@ -1,0 +1,18 @@
+UPLY DIGITAL V31.3
+
+1. Deploy folder ini ke Vercel.
+2. Environment Variables BeliBayar tetap:
+   BELIBAYAR_BACKEND_URL=https://uplyapi.duckdns.org
+   BELIBAYAR_BACKEND_KEY=<harus sama dengan UPLY_BACKEND_KEY Windows terbaru>
+   BELIBAYAR_BACKEND_READY=true
+   UPLY_RELAY_KEY=<sama dengan UPLY_RELAY_KEY Windows>
+3. Redeploy Production.
+4. Buka /api/health.
+5. Untuk BeliBayar target:
+   configured=true
+   ready=true
+   enabled=true
+   runtimeConnected=true
+   backendAuth=true
+6. Jika backendAuth=false / HTTP 401, salin ulang UPLY_BACKEND_KEY terbaru dari Windows ke BELIBAYAR_BACKEND_KEY Vercel, lalu Redeploy.
+7. Matikan QRIS Manual di Admin > Pembayaran & Toko. Setelah Simpan, QRIS Manual tidak akan dirender di checkout.

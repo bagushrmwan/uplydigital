@@ -683,3 +683,7 @@ html[data-theme="dark"] .payment-health>div,html[data-theme="dark"] .bank-row{bo
   .koala-home-hero p{font-size:15px!important;line-height:1.55!important;padding:0 5px}
   .qris-admin-title{align-items:center}.manual-toggle-card{padding:12px}
 }
+
+
+/* UPLY DIGITAL V31.3 — payment visibility hardening */
+[hidden]{display:none!important}

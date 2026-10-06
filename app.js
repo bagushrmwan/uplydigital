@@ -428,8 +428,10 @@ function checkoutPage(id,variantId=''){
   const initialQty=Math.max(1,Math.min(maxQty,Number(state.checkoutQty||1)));
   const firstMethod=methods[0]?.id||'';
   const payCards=methods.map((m,i)=>`<label class="payment-option smart-pay-card"><input type="radio" name="paymentMethod" value="${esc(m.id)}" ${i===0?'checked':''}><span><b><i class="pay-mark ${esc(m.id)}">${paymentIcon(m.id)}</i>${esc(m.label)}</b><small>${paymentDescription(m.id)}</small></span><em>${isAutomaticPayment(m.id)?'Otomatis':'Manual'}</em></label>`).join('');
-  const bankBlock=state.catalog.banks?.length?`<div class="payment-subpanel" data-pay-panel="manual" ${firstMethod!=='manual'?'hidden':''}><small>Pilih rekening tujuan</small>${state.catalog.banks.map((b,i)=>`<label class="payment-option"><input type="radio" name="bankId" value="${esc(b.id)}" ${i===0?'checked':''}><span><b>${esc(b.name)}</b><small>${esc(b.number)} · ${esc(b.holder)}</small></span></label>`).join('')}</div>`:'';
-  const qrisBlock=`<div class="payment-subpanel qris-checkout-box" data-pay-panel="qris_manual" ${firstMethod!=='qris_manual'?'hidden':''}><img src="/api/qris-image?v=${Date.now()}" alt="QRIS Uply Digital"><div><strong>${esc(state.catalog.settings.qrisName||'QRIS Manual')}</strong><small>Bayar sesuai nominal yang tertera lalu upload bukti dari detail pesanan.</small></div></div>`;
+  const hasManual=methods.some(m=>m.id==='manual');
+  const hasQrisManual=methods.some(m=>m.id==='qris_manual');
+  const bankBlock=hasManual&&state.catalog.banks?.length?`<div class="payment-subpanel" data-pay-panel="manual" ${firstMethod!=='manual'?'hidden':''}><small>Pilih rekening tujuan</small>${state.catalog.banks.map((b,i)=>`<label class="payment-option"><input type="radio" name="bankId" value="${esc(b.id)}" ${i===0?'checked':''}><span><b>${esc(b.name)}</b><small>${esc(b.number)} · ${esc(b.holder)}</small></span></label>`).join('')}</div>`:'';
+  const qrisBlock=hasQrisManual?`<div class="payment-subpanel qris-checkout-box" data-pay-panel="qris_manual" ${firstMethod!=='qris_manual'?'hidden':''}><img src="/api/qris-image?v=${Date.now()}" alt="QRIS Uply Digital"><div><strong>${esc(state.catalog.settings.qrisName||'QRIS Manual')}</strong><small>Bayar sesuai nominal yang tertera lalu upload bukti dari detail pesanan.</small></div></div>`:'';
   const subtotal=unitPrice*initialQty, discount=state.appliedVoucher?.discount||0;
   const balance=Number(state.user.balance||0);
   const externalReady=methods.length>0;
@@ -614,7 +616,10 @@ function orderDetail(id){
     const va=pd.vaNumber?`<div class="bank"><strong>Virtual Account ${esc(pd.channel||provider)}</strong><div class="bank-number">${esc(pd.vaNumber)}</div><span>Total ${money(o.total)}</span></div>`:'';
     const code=pd.paymentCode?`<div class="notice"><strong>Kode pembayaran:</strong> ${esc(pd.paymentCode)}</div>`:'';
     const instruction=url+qr+va+code, hasInstruction=!!instruction;
-    pay=`<div class="panel"><h2>Pembayaran otomatis · ${esc(provider)}</h2><p>Status gateway: <strong>${esc(o.gatewayStatus||'belum dibuat')}</strong></p>${instruction}<div class="button-row">${!hasInstruction?`<button class="btn" data-pay="${esc(o.id)}">Buat pembayaran</button>`:''}<button class="btn light" data-sync-pay="${esc(o.id)}">↻ Cek status pembayaran</button></div>${pd.transactionId?`<p class="tiny">ID transaksi: ${esc(pd.transactionId)}</p>`:''}<p class="tiny">Status pembayaran diperbarui otomatis. Tombol Cek status tetap tersedia sebagai cadangan.</p></div>`;
+    const gatewayError=String(o.gatewayStatus||'').toLowerCase()==='error'
+      ? `<div class="notice error"><strong>${esc(provider)} belum berhasil membuat transaksi.</strong><br>${esc((o.note||'Periksa koneksi backend pembayaran lalu tekan Buat pembayaran.').split('\n').slice(-1)[0])}</div>`
+      : '';
+    pay=`<div class="panel"><h2>Pembayaran otomatis · ${esc(provider)}</h2><p>Status gateway: <strong>${esc(o.gatewayStatus||'belum dibuat')}</strong></p>${gatewayError}${instruction}<div class="button-row">${!hasInstruction?`<button class="btn" data-pay="${esc(o.id)}">Buat pembayaran</button>`:''}<button class="btn light" data-sync-pay="${esc(o.id)}">↻ Cek status pembayaran</button></div>${pd.transactionId?`<p class="tiny">ID transaksi: ${esc(pd.transactionId)}</p>`:''}<p class="tiny">Status pembayaran diperbarui otomatis. Tombol Cek status tetap tersedia sebagai cadangan.</p></div>`;
   }
   if(o.status==='pending_payment' && o.paymentMode==='xendit'){
     pay=`<div class="notice warn"><strong>Order gateway versi lama.</strong><br>V25 menggunakan sistem pembayaran yang aktif pada konfigurasi toko. Jangan lanjutkan link gateway lama. Batalkan order ini lalu buat order baru agar pembayaran dibuat melalui Midtrans.</div>`;
@@ -1082,7 +1087,12 @@ document.addEventListener('submit', async e => {
       state.orders=await api('orders'); state.user=await api('me'); setAccount();
       state.checkoutQty=1;state.appliedVoucher=null;if(state.cart?.productId===f.dataset.productId&&String(state.cart?.variantId||'')===String(f.dataset.variantId||'')){state.cart=null;saveCart();}
       if(r.paymentUrl){msg('Pesanan dibuat. Membuka pembayaran…');setTimeout(()=>location.assign(r.paymentUrl),650)}
-      else{location.hash='#pesanan/'+encodeURIComponent(r.order.id);await route();msg(r.paymentError?`Pesanan dibuat, tetapi Midtrans error: ${r.paymentError}`:'Pesanan berhasil dibuat. Lanjutkan pembayaran.')}
+      else{
+        location.hash='#pesanan/'+encodeURIComponent(r.order.id);await route();
+        const provider=gatewayDisplay(r.order?.paymentMode||g('paymentMethod')||'gateway');
+        const paymentError=typeof r.paymentError==='string'?r.paymentError:(r.paymentError?JSON.stringify(r.paymentError):'');
+        msg(paymentError?`Pesanan dibuat, tetapi ${provider} belum dapat membuat pembayaran: ${paymentError}`:'Pesanan berhasil dibuat. Lanjutkan pembayaran.');
+      }
     } else if(f.id==='proofForm'){
       const file=f.elements.proof.files[0];if(!file)throw Error('Pilih file bukti.');if(file.size>1100000)throw Error('Ukuran bukti maksimal sekitar 1 MB.');
       const base64=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(file)});
