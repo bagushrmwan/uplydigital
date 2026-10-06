@@ -12,7 +12,7 @@ const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 for(const marker of ['/api/uply']){ if(!app.includes(marker)){ console.error('APP MARKER MISSING',marker); ok=false; } }
 const health=fs.readFileSync(new URL('../api/health.js',import.meta.url),'utf8');
 if(!health.includes("hosting:'vercel'")){ console.error('Health hosting marker missing'); ok=false; }
-if(!health.includes("version:'31.4'")){ console.error('V31.4 health version missing'); ok=false; }
+if(!health.includes("version:'31.5'")){ console.error('V31.5 health version missing'); ok=false; }
 
 const api=fs.readFileSync(new URL('../api/uply.js',import.meta.url),'utf8');
 for(const marker of ['saveVoucher','adjustBalance','setCustomerTier','validateVoucher','markNotificationsRead']){ if(!api.includes(marker)){console.error('API FEATURE MISSING',marker);ok=false;} }
@@ -56,10 +56,14 @@ if(!ok) process.exit(1);
 if(!app.includes("const qrisBlock=hasQrisManual?")){console.error('V31.3 QRIS MANUAL CONDITIONAL RENDER MISSING');ok=false;}
 if(!market.includes('[hidden]{display:none!important}')){console.error('V31.3 HIDDEN HARDENING MISSING');ok=false;}
 const belibayar=fs.readFileSync(new URL('../lib/belibayar.js',import.meta.url),'utf8');
+const gateways=fs.readFileSync(new URL('../lib/gateways.js',import.meta.url),'utf8');
 if(!belibayar.includes('probeBelibayarBackend')){console.error('V31.3 BELIBAYAR PROBE MISSING');ok=false;}
 if(!health.includes('runtimeConnected')){console.error('V31.3 BELIBAYAR RUNTIME HEALTH MISSING');ok=false;}
 if(!ok) process.exit(1);
 if(!belibayar.includes('flattenMessage')||!belibayar.includes('providerMessage')){console.error('V31.4 BELIBAYAR ERROR NORMALIZER MISSING');ok=false;}
 if(!app.includes('readableError')){console.error('V31.4 FRONTEND ERROR NORMALIZER MISSING');ok=false;}
 if(!ok) process.exit(1);
-console.log('Smoke check OK — V31.4 BeliBayar error handling + V31.3 payment visibility ready');
+
+if(!belibayar.includes('api/belibayar/diagnostic')||!belibayar.includes('normalizeBelibayarData')){console.error('V31.5 BELIBAYAR DIAGNOSTIC/NORMALIZER MISSING');ok=false;}
+if(!gateways.includes('data.qrUrl')||!gateways.includes('data.qr_url')){console.error('V31.5 QRIS URL NORMALIZER MISSING');ok=false;}
+console.log('Smoke check OK — V31.5 BeliBayar provider diagnostic + QRIS normalization ready');
