@@ -12,7 +12,7 @@ const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 for(const marker of ['/api/uply']){ if(!app.includes(marker)){ console.error('APP MARKER MISSING',marker); ok=false; } }
 const health=fs.readFileSync(new URL('../api/health.js',import.meta.url),'utf8');
 if(!health.includes("hosting:'vercel'")){ console.error('Health hosting marker missing'); ok=false; }
-if(!health.includes("version:'31.2'")){ console.error('V31.2 health version missing'); ok=false; }
+if(!health.includes("version:'31.3'")){ console.error('V31.3 health version missing'); ok=false; }
 
 const api=fs.readFileSync(new URL('../api/uply.js',import.meta.url),'utf8');
 for(const marker of ['saveVoucher','adjustBalance','setCustomerTier','validateVoucher','markNotificationsRead']){ if(!api.includes(marker)){console.error('API FEATURE MISSING',marker);ok=false;} }
@@ -53,4 +53,10 @@ if(!api.includes('qrisManualPaymentEnabled')){console.error('V31.2 QRIS MANUAL A
 if(!db.includes("qrisManualPaymentEnabled:'true'")){console.error('V31.2 QRIS MANUAL DEFAULT MISSING');ok=false;}
 if(!market.includes('UPLY DIGITAL V31.2 — BALANCED LIGHT/DARK + QRIS MANUAL TOGGLE')){console.error('V31.2 THEME CONTRAST PATCH MISSING');ok=false;}
 if(!ok) process.exit(1);
-console.log('Smoke check OK — V31.2 QRIS manual ON/OFF + balanced light/dark theme ready');
+if(!app.includes("const qrisBlock=hasQrisManual?")){console.error('V31.3 QRIS MANUAL CONDITIONAL RENDER MISSING');ok=false;}
+if(!market.includes('[hidden]{display:none!important}')){console.error('V31.3 HIDDEN HARDENING MISSING');ok=false;}
+const belibayar=fs.readFileSync(new URL('../lib/belibayar.js',import.meta.url),'utf8');
+if(!belibayar.includes('probeBelibayarBackend')){console.error('V31.3 BELIBAYAR PROBE MISSING');ok=false;}
+if(!health.includes('runtimeConnected')){console.error('V31.3 BELIBAYAR RUNTIME HEALTH MISSING');ok=false;}
+if(!ok) process.exit(1);
+console.log('Smoke check OK — V31.3 payment visibility + BeliBayar runtime probe ready');
