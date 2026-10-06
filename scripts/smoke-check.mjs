@@ -12,7 +12,7 @@ const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 for(const marker of ['/api/uply']){ if(!app.includes(marker)){ console.error('APP MARKER MISSING',marker); ok=false; } }
 const health=fs.readFileSync(new URL('../api/health.js',import.meta.url),'utf8');
 if(!health.includes("hosting:'vercel'")){ console.error('Health hosting marker missing'); ok=false; }
-if(!health.includes("version:'31.6'")){ console.error('V31.6 health version missing'); ok=false; }
+if(!health.includes("version:'31.8'")){ console.error('V31.8 health version missing'); ok=false; }
 
 const api=fs.readFileSync(new URL('../api/uply.js',import.meta.url),'utf8');
 for(const marker of ['saveVoucher','adjustBalance','setCustomerTier','validateVoucher','markNotificationsRead']){ if(!api.includes(marker)){console.error('API FEATURE MISSING',marker);ok=false;} }
@@ -70,4 +70,15 @@ for(const marker of ['getBelibayarChannels','virtual_account','api/payments/beli
 for(const marker of ['belibayar-method-tabs','bb-va-payment','data-copy-payment','paymentSubmethod']){if(!app.includes(marker)){console.error('V31.6 QRIS EMBED/VA UI MISSING',marker);ok=false;}}
 if(!api.includes("getGatewayChannels('belibayar')")){console.error('V31.6 ACTIVE CHANNEL VALIDATION MISSING');ok=false;}
 if(!ok) process.exit(1);
-console.log('Smoke check OK — V31.6 BeliBayar QRIS embedded + active Virtual Account channels ready');
+const email=fs.readFileSync(new URL('../lib/email.js',import.meta.url),'utf8');
+for(const marker of ['BREVO_API_KEY','RESEND_API_KEY','emailTemplate','emailHealth']){if(!email.includes(marker)){console.error('V31.7 EMAIL FEATURE MISSING',marker);ok=false;}}
+if(!api.includes('Pesanan berhasil dibuat')){console.error('V31.7 ORDER EMAIL TEMPLATE MISSING');ok=false;}
+if(!market.includes('UPLY DIGITAL V31.7 — TRANSPARENT BRAND + EMAIL READY')){console.error('V31.7 LOGO PATCH MISSING');ok=false;}
+if(!ok) process.exit(1);
+const paymentState=fs.readFileSync(new URL('../lib/payment-state.js',import.meta.url),'utf8');
+if(!paymentState.includes('belibayarAmountFrom')||!paymentState.includes('base_amount')){console.error('V31.8 BELIBAYAR BASE AMOUNT PATCH MISSING');ok=false;}
+if(!paymentState.includes('POSITION($3 IN note)>0')){console.error('V31.8 DUPLICATE MISMATCH NOTE GUARD MISSING');ok=false;}
+if(app.includes('Status diperbarui melalui webhook/status sync.')||app.includes('Hanya channel aktif di akun merchant yang ditampilkan.')){console.error('V31.8 CUSTOMER TECHNICAL COPY STILL PRESENT');ok=false;}
+if(!app.includes('friendlyOrderNote')){console.error('V31.8 CUSTOMER NOTE DEDUPE MISSING');ok=false;}
+if(!ok) process.exit(1);
+console.log('Smoke check OK — V31.8 BeliBayar amount validation + customer copy cleanup ready');
