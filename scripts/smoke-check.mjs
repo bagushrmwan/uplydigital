@@ -12,7 +12,7 @@ const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 for(const marker of ['/api/uply']){ if(!app.includes(marker)){ console.error('APP MARKER MISSING',marker); ok=false; } }
 const health=fs.readFileSync(new URL('../api/health.js',import.meta.url),'utf8');
 if(!health.includes("hosting:'vercel'")){ console.error('Health hosting marker missing'); ok=false; }
-if(!health.includes("version:'31.8'")){ console.error('V31.8 health version missing'); ok=false; }
+if(!health.includes("version:'31.9'")){ console.error('V31.9 health version missing'); ok=false; }
 
 const api=fs.readFileSync(new URL('../api/uply.js',import.meta.url),'utf8');
 for(const marker of ['saveVoucher','adjustBalance','setCustomerTier','validateVoucher','markNotificationsRead']){ if(!api.includes(marker)){console.error('API FEATURE MISSING',marker);ok=false;} }
@@ -81,4 +81,7 @@ if(!paymentState.includes('POSITION($3 IN note)>0')){console.error('V31.8 DUPLIC
 if(app.includes('Status diperbarui melalui webhook/status sync.')||app.includes('Hanya channel aktif di akun merchant yang ditampilkan.')){console.error('V31.8 CUSTOMER TECHNICAL COPY STILL PRESENT');ok=false;}
 if(!app.includes('friendlyOrderNote')){console.error('V31.8 CUSTOMER NOTE DEDUPE MISSING');ok=false;}
 if(!ok) process.exit(1);
-console.log('Smoke check OK — V31.8 BeliBayar amount validation + customer copy cleanup ready');
+
+if(!db.includes("pg_advisory_xact_lock(hashtext('uply-digital-schema-v31'))")){console.error('V31.9 ADVISORY SCHEMA LOCK MISSING');ok=false;}
+if(!db.includes("String(err?.code || '') !== '40P01'")){console.error('V31.9 DEADLOCK RETRY MISSING');ok=false;}
+console.log('Smoke check OK — V31.9 database deadlock guard + V31.8 payment fixes ready');
