@@ -687,3 +687,26 @@ html[data-theme="dark"] .payment-health>div,html[data-theme="dark"] .bank-row{bo
 
 /* UPLY DIGITAL V31.3 — payment visibility hardening */
 [hidden]{display:none!important}
+
+/* ==========================================================
+   UPLY DIGITAL V31.7 — TRANSPARENT BRAND + EMAIL READY
+   ========================================================== */
+.v18-brand .brand-mark,
+.brand .brand-mark,
+.v18-footer .footer-logo-row img,
+.site-footer .footer-logo-row img,
+.footer-logo-row img{
+  background:transparent!important;
+  box-shadow:none!important;
+  border-radius:0!important;
+  object-fit:contain!important;
+  padding:0!important;
+  filter:drop-shadow(0 8px 14px rgba(11,92,255,.16))!important;
+}
+html[data-theme="dark"] .v18-brand .brand-mark,
+html[data-theme="dark"] .footer-logo-row img{
+  background:transparent!important;
+  filter:drop-shadow(0 8px 16px rgba(36,119,255,.26))!important;
+}
+.v18-brand{gap:12px!important}.v18-brand strong{letter-spacing:-.35px}
+@media(max-width:760px){.v18-brand{gap:10px!important}.v18-brand .brand-mark{width:41px!important;height:41px!important}}
