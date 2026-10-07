@@ -1,7 +1,0 @@
-UPLY DIGITAL V32.2 - ORDER DETAIL UI POLISH
-
-1. Deploy ZIP/folder ini ke Vercel.
-2. Tidak ada Environment Variable baru.
-3. Windows backend tidak perlu diubah.
-4. Pastikan /api/health menampilkan version 32.2.
-5. Buka detail order QRIS/VA dan cek tampilan mobile.
