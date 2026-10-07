@@ -322,7 +322,7 @@ export default async function handler(req,res){
       if(existing.rowCount){data={order:publicOrder(existing.rows[0]),paymentUrl:existing.rows[0].payment_url||'',paymentData:existing.rows[0].gateway_payload||null,duplicate:true};}
       else {
         const qty=Number(p.quantity); if(!Number.isInteger(qty)||qty<1||qty>5) throw safeError('Jumlah produk harus 1–5.');
-        const client=await pool.connect(); let order=null,prod=null,variant=null,pricedProduct=null,mode='manual',voucher={code:'',discount:0}; let lowStockAfter=null;
+        const client=await pool.connect(); let order=null,prod=null,variant=null,pricedProduct=null,mode='manual',voucher={code:'',discount:0}; let lowStockAfter=null,selectedPayMethod='',selectedPayChannel='';
         try{
           await client.query('BEGIN');
           const {rows:prs}=await client.query('SELECT * FROM products WHERE id=$1 AND active=TRUE LIMIT 1 FOR UPDATE',[text(p.productId,100)]); prod=prs[0]; if(!prod) throw safeError('Produk tidak tersedia.');
@@ -382,7 +382,7 @@ export default async function handler(req,res){
           if(voucher.code) await client.query('INSERT INTO voucher_usages(voucher_code,user_id,order_id,discount) VALUES($1,$2,$3,$4)',[voucher.code,u.id,orderId,voucher.discount]);
 
           const gatewayDefaults=isAutomaticGateway(mode)?defaultGatewayMethod(mode):{method:mode,channel:mode==='qris_manual'?'QRIS_MANUAL':''};
-          let selectedPayMethod=gatewayDefaults.method, selectedPayChannel=gatewayDefaults.channel;
+          selectedPayMethod=gatewayDefaults.method; selectedPayChannel=gatewayDefaults.channel;
           if(mode==='belibayar'){
             const submethod=text(p.paymentSubmethod,30).toLowerCase()||'qris';
             const requestedChannel=text(p.paymentChannel,30).toUpperCase();
@@ -399,27 +399,44 @@ export default async function handler(req,res){
           order=ors[0]; await client.query('COMMIT');
         }catch(e){await client.query('ROLLBACK');throw e;}finally{await client.release();}
 
+        // V32.4: kirim notifikasi order segera setelah COMMIT, sebelum koneksi gateway eksternal.
+        // Dengan begitu QRIS/VA tetap menerima email order walaupun create-payment lambat atau perlu recovery.
+        await audit(u.email,'order_created',order.id,{productId:prod.id,variantId:variant?.id||'',subtotal:Number(order.subtotal),discount:Number(order.discount),balanceUsed:Number(order.balance_used),total:Number(order.total),mode,voucher:voucher.code});
+        await notifyAdmin('order','Pesanan baru',`${prod.name}${variant?` · ${variant.name}`:''} · ${order.name} · Rp${Number(order.total).toLocaleString('id-ID')}`,order.id);
+        if(lowStockAfter&&lowStockAfter.stock<=lowStockAfter.threshold) await notifyAdmin('stock','Stok menipis',`${prod.name}${lowStockAfter.label?` · ${lowStockAfter.label}`:''} tersisa ${lowStockAfter.stock}.`,variant?.id||prod.id);
+        const orderLink=`${String(process.env.SITE_URL||'').replace(/\/$/,'')}/#pesanan`;
+        const emailPaymentLabel=mode==='belibayar'
+          ? (selectedPayMethod==='virtual_account'?`Virtual Account ${selectedPayChannel}`:'QRIS BeliBayar')
+          : mode==='manual'?'Transfer / QRIS manual'
+          : mode==='qris_manual'?'QRIS manual'
+          : mode==='balance'?'Saldo Uply'
+          : (gatewayLabel(mode)||mode);
+        const pendingOrder=mode!=='balance';
+        const emailBody=`
+          <p style="margin:0 0 20px;color:#42516d">Halo <strong style="color:#0b1736">${escapeHtml(order.name)}</strong>, terima kasih. Pesanan kamu sudah kami terima dan tercatat di Uply Digital.</p>
+          <div style="margin:0 0 22px;padding:16px 18px;border-radius:16px;background:${pendingOrder?'#edf4ff':'#ecfdf3'};border:1px solid ${pendingOrder?'#d5e5ff':'#ccefd9'}">
+            <div style="font-size:13px;font-weight:900;color:${pendingOrder?'#1456c8':'#167647'}">${pendingOrder?'MENUNGGU PEMBAYARAN':'PEMBAYARAN SELESAI'}</div>
+            <div style="margin-top:5px;color:#4b5b76;font-size:14px;line-height:1.6">${pendingOrder?'Pesanan sudah dibuat. Buka halaman pesanan untuk menyelesaikan pembayaran.':'Pembayaran menggunakan saldo sudah dikonfirmasi dan pesanan masuk ke proses berikutnya.'}</div>
+          </div>
+          <div style="font-size:13px;font-weight:900;letter-spacing:.04em;color:#0b1736;margin-bottom:10px">RINGKASAN PESANAN</div>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;border-collapse:separate;border-spacing:0;background:#f8faff;border:1px solid #e5ebf6;border-radius:16px;overflow:hidden">
+            <tr><td style="padding:12px 16px;color:#71809a;border-bottom:1px solid #e7edf7">Order ID</td><td style="padding:12px 16px;text-align:right;font-weight:800;color:#152342;border-bottom:1px solid #e7edf7">${escapeHtml(order.id)}</td></tr>
+            <tr><td style="padding:12px 16px;color:#71809a;border-bottom:1px solid #e7edf7">Produk</td><td style="padding:12px 16px;text-align:right;font-weight:800;color:#152342;border-bottom:1px solid #e7edf7">${escapeHtml(prod.name)}</td></tr>
+            <tr><td style="padding:12px 16px;color:#71809a;border-bottom:1px solid #e7edf7">Varian</td><td style="padding:12px 16px;text-align:right;color:#152342;border-bottom:1px solid #e7edf7">${escapeHtml(variant?.name||prod.duration)}</td></tr>
+            <tr><td style="padding:12px 16px;color:#71809a;border-bottom:1px solid #e7edf7">Jumlah</td><td style="padding:12px 16px;text-align:right;color:#152342;border-bottom:1px solid #e7edf7">${Number(order.quantity)}</td></tr>
+            <tr><td style="padding:12px 16px;color:#71809a;border-bottom:1px solid #e7edf7">Pembayaran</td><td style="padding:12px 16px;text-align:right;color:#152342;border-bottom:1px solid #e7edf7">${escapeHtml(emailPaymentLabel)}</td></tr>
+            <tr><td style="padding:15px 16px;color:#152342;font-weight:900">Total</td><td style="padding:15px 16px;text-align:right;color:#1261ff;font-size:20px;font-weight:900">Rp${Number(order.total).toLocaleString('id-ID')}</td></tr>
+          </table>
+          <div style="margin-top:22px;padding:0 2px;color:#62718a;font-size:14px;line-height:1.7"><strong style="color:#293a59">Langkah berikutnya</strong><br>${pendingOrder?'Selesaikan pembayaran dari halaman pesanan. Email konfirmasi pembayaran akan dikirim terpisah setelah pembayaran berhasil diverifikasi.':'Pesanan kamu sudah masuk antrean pemrosesan. Kami akan memberi kabar saat pesanan selesai.'}</div>`;
+        const orderEmail=await sendEmail(u.email,`Pesanan ${order.id} sudah kami terima`,emailTemplate({title:'Pesanan sudah kami terima',eyebrow:'INFORMASI PESANAN',body:emailBody,ctaLabel:'Lihat Pesanan',ctaUrl:orderLink,note:'Email ini adalah konfirmasi pesanan, bukan bukti pembayaran. Gunakan Order ID di atas saat menghubungi admin Uply Digital.'}));
+        await audit('system',orderEmail?.sent?'order_email_sent':'order_email_failed',order.id,{provider:orderEmail?.provider||'',status:Number(orderEmail?.status||0),reason:orderEmail?.reason||'',error:orderEmail?.error||''});
+
         let paymentUrl='',paymentData=null,paymentError='';
         if(isAutomaticGateway(mode)){
           try{const created=await createAutomaticPaymentForOrder(order,mode);paymentUrl=created.paymentUrl;paymentData=created.paymentData;order=(await q('SELECT * FROM orders WHERE id=$1',[order.id])).rows[0];}
           catch(e){paymentError=e?.safe?e.message:`${gatewayLabel(mode)} belum dapat membuat transaksi.`;await q(`UPDATE orders SET gateway_status='error',note=CASE WHEN note='' THEN $2 ELSE note || E'\n' || $2 END,updated_at=NOW() WHERE id=$1`,[order.id,`Payment gateway ${gatewayLabel(mode)}: ${paymentError}`]);}
         }
         if(mode==='balance') await autoFulfillOrder(order.id,'balance');
-        await audit(u.email,'order_created',order.id,{productId:prod.id,variantId:variant?.id||'',subtotal:Number(order.subtotal),discount:Number(order.discount),balanceUsed:Number(order.balance_used),total:Number(order.total),mode,voucher:voucher.code});
-        await notifyAdmin('order','Pesanan baru',`${prod.name}${variant?` · ${variant.name}`:''} · ${order.name} · Rp${Number(order.total).toLocaleString('id-ID')}`,order.id);
-        if(lowStockAfter&&lowStockAfter.stock<=lowStockAfter.threshold) await notifyAdmin('stock','Stok menipis',`${prod.name}${lowStockAfter.label?` · ${lowStockAfter.label}`:''} tersisa ${lowStockAfter.stock}.`,variant?.id||prod.id);
-        const orderLink=`${String(process.env.SITE_URL||'').replace(/\/$/,'')}/#pesanan`;
-        const emailBody=`<p style="margin:0 0 16px">Halo <strong>${escapeHtml(order.name)}</strong>, pesanan kamu sudah masuk ke sistem Uply Digital.</p>
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#f8faff;border-radius:14px">
-            <tr><td style="padding:9px 14px;color:#71809a">Order ID</td><td style="padding:9px 14px;text-align:right;font-weight:800;color:#0f1d3a">${escapeHtml(order.id)}</td></tr>
-            <tr><td style="padding:9px 14px;color:#71809a">Produk</td><td style="padding:9px 14px;text-align:right;font-weight:800;color:#0f1d3a">${escapeHtml(prod.name)}</td></tr>
-            <tr><td style="padding:9px 14px;color:#71809a">Varian</td><td style="padding:9px 14px;text-align:right;color:#0f1d3a">${escapeHtml(variant?.name||prod.duration)}</td></tr>
-            <tr><td style="padding:9px 14px;color:#71809a">Jumlah</td><td style="padding:9px 14px;text-align:right;color:#0f1d3a">${Number(order.quantity)}</td></tr>
-            <tr><td style="padding:9px 14px;color:#71809a">Metode</td><td style="padding:9px 14px;text-align:right;color:#0f1d3a">${escapeHtml(mode==='belibayar'?`BeliBayar ${selectedPayMethod==='virtual_account'?selectedPayChannel:'QRIS'}`:gatewayLabel(mode)||mode)}</td></tr>
-            <tr><td style="padding:12px 14px;border-top:1px solid #e4eaf5;color:#0f1d3a;font-weight:800">Total</td><td style="padding:12px 14px;border-top:1px solid #e4eaf5;text-align:right;color:#0b5cff;font-size:18px;font-weight:900">Rp${Number(order.total).toLocaleString('id-ID')}</td></tr>
-          </table>
-          <p style="margin:18px 0 0">Status: <strong>${mode==='balance'?'Pembayaran lunas dari saldo':'Menunggu pembayaran'}</strong>.</p>`;
-        await sendEmail(u.email,`Pesanan ${order.id} berhasil dibuat`,emailTemplate({title:'Pesanan berhasil dibuat',eyebrow:'UPLY DIGITAL · ORDER',body:emailBody,ctaLabel:'Lihat Pesanan Saya',ctaUrl:orderLink,note:'Simpan Order ID untuk memudahkan pengecekan status pesanan.'}));
         data={order:publicOrder((await q('SELECT * FROM orders WHERE id=$1',[order.id])).rows[0]),paymentUrl:paymentUrl||order.payment_url||'',paymentData:paymentData||order.gateway_payload||null,paymentError,duplicate:false};
       }
     }
@@ -696,7 +713,7 @@ export default async function handler(req,res){
       if(status==='cancelled') await refundOrderCredits(orderId,a.email,'Pesanan dibatalkan admin.');
       if(status==='processing') await notifyUser(old.user_id,'order','Pesanan sedang diproses',`${old.product_name} sedang diproses admin.`,orderId);
       if(status==='cancelled') await notifyUser(old.user_id,'order','Pesanan dibatalkan',`${old.product_name} dibatalkan.`,orderId);
-      if(status==='completed'){await syncMembership(old.user_id,a.email);await notifyAdmin('success','Pesanan selesai',`${old.product_name} · ${old.name}`,orderId);await notifyUser(old.user_id,'success','Pesanan selesai',`${old.product_name} sudah selesai.${Number(old.warranty_days||0)>0?` Garansi aktif ${Number(old.warranty_days)} hari.`:''}`,orderId);await sendEmail(old.email,`Pesanan ${orderId} selesai`,emailTemplate({title:'Pesanan selesai',eyebrow:'UPLY DIGITAL · SELESAI',body:`<p>Pesanan <strong>${escapeHtml(old.product_name)}</strong> sudah selesai.</p><div style="margin-top:16px;padding:15px;background:#f7f9fd;border-radius:12px;white-space:pre-wrap;color:#17233c">${escapeHtml(delivery)}</div>`,ctaLabel:'Buka Dashboard',ctaUrl:`${String(process.env.SITE_URL||'').replace(/\/$/,'')}/#dashboard`,note:Number(old.warranty_days||0)>0?`Garansi aktif ${Number(old.warranty_days)} hari sesuai ketentuan produk.`:''}));} 
+      if(status==='completed'){await syncMembership(old.user_id,a.email);await notifyAdmin('success','Pesanan selesai',`${old.product_name} · ${old.name}`,orderId);await notifyUser(old.user_id,'success','Pesanan selesai',`${old.product_name} sudah selesai.${Number(old.warranty_days||0)>0?` Garansi aktif ${Number(old.warranty_days)} hari.`:''}`,orderId);await sendEmail(old.email,`Pesanan ${orderId} sudah siap`,emailTemplate({title:'Pesanan kamu sudah siap',eyebrow:'PESANAN SELESAI',body:`<p style="margin:0 0 20px;color:#42516d">Halo <strong style="color:#0b1736">${escapeHtml(old.name||'Kak')}</strong>, pesanan <strong style="color:#0b1736">${escapeHtml(old.product_name)}</strong> sudah selesai diproses.</p><div style="padding:16px 18px;border-radius:16px;background:#ecfdf3;border:1px solid #ccefd9;margin-bottom:22px"><div style="font-size:13px;font-weight:900;color:#167647">PESANAN SELESAI</div><div style="margin-top:5px;color:#4b5b76;font-size:14px">Detail produk sudah tersedia dan siap digunakan.</div></div><div style="font-size:13px;font-weight:900;letter-spacing:.04em;color:#0b1736;margin-bottom:10px">DETAIL PRODUK</div><div style="padding:18px;background:#f8faff;border:1px solid #e4ebf7;border-radius:16px;white-space:pre-wrap;color:#17233c;line-height:1.75;font-family:Arial,Helvetica,sans-serif">${escapeHtml(delivery)}</div><p style="margin:20px 0 0;color:#62718a;font-size:14px">Simpan detail produk ini dengan aman dan ikuti petunjuk penggunaan yang disertakan.</p>`,ctaLabel:'Buka Dashboard',ctaUrl:`${String(process.env.SITE_URL||'').replace(/\/$/,'')}/#dashboard`,note:Number(old.warranty_days||0)>0?`Garansi aktif ${Number(old.warranty_days)} hari sesuai ketentuan produk.`:'Jika ada kendala, hubungi admin Uply Digital dengan menyertakan Order ID.'}));} 
       data=publicOrder((await q('SELECT * FROM orders WHERE id=$1',[orderId])).rows[0],true);
     }
 
