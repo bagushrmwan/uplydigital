@@ -1,8 +1,0 @@
-UPLY DIGITAL V32.0
-
-1. Deploy seluruh isi project ini ke Vercel.
-2. Environment Variables V31.9 tetap digunakan; tidak ada variable baru.
-3. Redeploy Production.
-4. Buka /api/health dan pastikan version = 32.0.
-5. Tes skenario: pilih VA BCA -> ubah ke QRIS -> checkout. Order harus menjadi QRIS, bukan VA BCA.
-6. Windows backend BeliBayar tidak perlu diubah.
