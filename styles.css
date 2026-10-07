@@ -370,3 +370,80 @@ html[data-theme="dark"] .belibayar-choice-head strong{color:#eef5ff}
   .bb-va-number{grid-template-columns:1fr}
   .bb-va-number>span{grid-column:auto}.bb-va-number>.btn{width:100%}
 }
+
+
+/* =========================
+   V32.2 — Order detail layout polish
+   ========================= */
+.topbar .wrap.nav{width:100%}
+.order-detail-page{padding-top:22px;padding-bottom:28px}
+.order-detail-wrap{width:100%}
+.order-detail-head{margin-bottom:16px}
+.order-detail-head h1{line-height:1.08}
+.order-detail-head p{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.order-detail-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(260px,.65fr);gap:16px;align-items:start}
+.order-detail-grid>.stack{min-width:0}
+.order-summary-sticky{position:sticky;top:92px;width:100%;height:max-content;padding:18px}
+.order-summary-sticky h2{margin-bottom:8px}
+.order-summary-sticky>p{margin-top:0}
+.order-breakdown{display:grid;margin:12px 0 8px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.order-breakdown>span{display:flex;justify-content:space-between;gap:12px;padding:10px 0}
+.order-breakdown>span+span{border-top:1px solid var(--line)}
+.order-summary-sticky>.price{margin:8px 0 12px}
+.automatic-payment-panel{padding:18px}
+.automatic-payment-panel>h2{margin-bottom:8px}
+.automatic-payment-panel>p:first-of-type{margin:0 0 12px}
+.bb-payment-card{margin:12px 0 0;padding:16px}
+.bb-qr-frame{width:min(280px,100%);margin:14px auto;padding:11px;border-radius:17px}
+.bb-payment-heading>strong{font-size:19px;line-height:1.25}
+.bb-payment-heading>small{line-height:1.45}
+.bb-payment-actions{gap:8px}
+.bb-payment-actions .btn{min-height:42px}
+.order-timeline{margin-top:10px}
+.order-detail-grid .panel-title h2{margin-bottom:4px}
+.order-detail-grid .panel-title p{margin:0}
+
+@media(max-width:900px){
+  .order-detail-grid{grid-template-columns:1fr}
+  .order-summary-sticky{position:static;width:100%}
+}
+
+@media(max-width:760px){
+  .order-detail-page{padding-top:12px;padding-bottom:12px}
+  .order-detail-wrap{padding-left:12px!important;padding-right:12px!important}
+  .order-detail-head{margin-bottom:12px}
+  .order-detail-head .eyebrow{font-size:10px}
+  .order-detail-head h1{font-size:27px;margin-top:5px}
+  .order-detail-head p{margin-top:5px;font-size:13px}
+  .order-detail-grid{gap:10px}
+  .order-detail-grid>.stack{gap:10px}
+  .order-detail-grid .panel,.order-summary-sticky{border-radius:16px;padding:14px}
+  .automatic-payment-panel{padding:14px!important}
+  .automatic-payment-panel>h2{font-size:20px;line-height:1.2}
+  .bb-payment-card{padding:13px;margin-top:10px;border-radius:16px;box-shadow:none}
+  .bb-provider-chip{font-size:10px;padding:5px 8px}
+  .bb-payment-heading>strong{font-size:18px}
+  .bb-payment-heading>small{font-size:12px}
+  .bb-qr-frame{width:min(250px,88vw);padding:9px;margin:12px auto}
+  .bb-payment-total,.bb-payment-expiry{padding:10px 0}
+  .bb-payment-total strong{font-size:20px}
+  .bb-payment-actions{display:grid;grid-template-columns:1fr;gap:7px}
+  .bb-payment-actions .btn{width:100%;min-height:40px;padding:9px 12px}
+  .automatic-payment-panel>.tiny{margin:10px 0 0;line-height:1.45}
+  .order-timeline{grid-template-columns:repeat(5,minmax(78px,1fr));gap:2px;margin-top:10px;padding-bottom:2px}
+  .order-timeline-step{min-width:78px;gap:4px}
+  .order-timeline-step>span strong{font-size:9px;line-height:1.25}
+  .order-timeline-step>span small{font-size:8px}
+  .order-summary-sticky{margin:0;width:100%;max-width:none}
+  .order-summary-sticky .btn{width:100%;margin-top:8px}
+  .order-detail-page + footer{margin-top:0}
+}
+
+@media(max-width:520px){
+  .order-detail-page{padding-top:10px;padding-bottom:8px}
+  .order-detail-wrap{padding-left:10px!important;padding-right:10px!important}
+  .order-detail-head h1{font-size:25px}
+  .bb-qr-frame{width:min(236px,82vw)}
+  .order-timeline{grid-template-columns:repeat(5,minmax(72px,1fr))}
+  .order-timeline-step{min-width:72px}
+}
