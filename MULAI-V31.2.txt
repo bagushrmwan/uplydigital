@@ -1,8 +1,0 @@
-UPLY DIGITAL V31.2
-
-1. Upload project ini ke Vercel lalu Redeploy Production.
-2. Environment Variables V31/V31.1 tetap dipakai; tidak ada secret baru.
-3. Buka Admin > Pembayaran & Toko.
-4. Sekarang ada toggle terpisah: Transfer Bank Manual, QRIS Manual, Saldo Uply.
-5. Toggle QRIS Manual OFF untuk menyembunyikannya dari checkout tanpa menghapus gambar QRIS.
-6. Tema Light/Dark sudah diperbaiki; tes melalui menu Tema Tampilan.
