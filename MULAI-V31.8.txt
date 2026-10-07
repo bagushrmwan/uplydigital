@@ -1,7 +1,0 @@
-UPLY DIGITAL V31.8
-
-1. Deploy folder/ZIP ini ke Vercel.
-2. Environment Variables V31.7 tidak perlu diubah.
-3. Windows Backend V31.6 tidak perlu diubah untuk patch ini.
-4. Setelah deploy, buka /api/health dan pastikan version = 31.8.
-5. Untuk order lama yang terkena pesan nominal mismatch, tekan Cek status pembayaran sekali. Jika base_amount BeliBayar cocok dengan invoice, warning lama akan dibersihkan dan status order diproses normal.
