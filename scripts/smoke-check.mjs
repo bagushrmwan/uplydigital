@@ -12,7 +12,7 @@ const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
 for(const marker of ['/api/uply']){ if(!app.includes(marker)){ console.error('APP MARKER MISSING',marker); ok=false; } }
 const health=fs.readFileSync(new URL('../api/health.js',import.meta.url),'utf8');
 if(!health.includes("hosting:'vercel'")){ console.error('Health hosting marker missing'); ok=false; }
-if(!health.includes("version:'32.1'")){ console.error('V32.1 health version missing'); ok=false; }
+if(!health.includes("version:'32.2'")){ console.error('V32.2 health version missing'); ok=false; }
 
 const api=fs.readFileSync(new URL('../api/uply.js',import.meta.url),'utf8');
 for(const marker of ['saveVoucher','adjustBalance','setCustomerTier','validateVoucher','markNotificationsRead']){ if(!api.includes(marker)){console.error('API FEATURE MISSING',marker);ok=false;} }
@@ -84,6 +84,6 @@ if(!ok) process.exit(1);
 
 if(!db.includes("pg_advisory_xact_lock(hashtext('uply-digital-schema-v31'))")){console.error('V31.9 ADVISORY SCHEMA LOCK MISSING');ok=false;}
 if(!db.includes("String(err?.code || '') !== '40P01'")){console.error('V31.9 DEADLOCK RETRY MISSING');ok=false;}
-for(const marker of ['windows-static-ip','/api/email/send','BELIBAYAR_BACKEND_URL','probeEmailBackend']){if(!email.includes(marker)){console.error('V32.1 WINDOWS EMAIL RELAY MISSING',marker);ok=false;}}
+for(const marker of ['windows-static-ip','/api/email/send','BELIBAYAR_BACKEND_URL','probeEmailBackend']){if(!email.includes(marker)){console.error('V32.2 WINDOWS EMAIL RELAY MISSING',marker);ok=false;}}
 if(!ok) process.exit(1);
-console.log('Smoke check OK — V32.1 Windows static-IP email relay + V32.0 checkout fixes ready');
+console.log('Smoke check OK — V32.2 Windows static-IP email relay + V32.0 checkout fixes ready');
